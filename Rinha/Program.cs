@@ -44,7 +44,7 @@ app.MapPost("payments", ([FromBody] PaymentRequest request, [FromServices] IRequ
     return Results.Accepted();
 });
 
-app.MapGet("/payments-summary", async ([FromServices] IConfiguration config, [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to) =>
+app.MapGet("/payments-summary", async ([FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to) =>
 {
 
     await using var conn = new NpgsqlConnection(connectionString);
@@ -68,30 +68,11 @@ app.MapGet("/payments-summary", async ([FromServices] IConfiguration config, [Fr
     var defaultResult = results.FirstOrDefault(r => r.Processor == "default") ?? new SummaryRow("default", 0, 0);
     var fallbackResult = results.FirstOrDefault(r => r.Processor == "fallback") ?? new SummaryRow("fallback", 0, 0);
 
-    return Results.Ok(new PaymentSummaryResponse(
+    var summary = new PaymentSummaryResponse(
         new PaymentSummaryItem(defaultResult.TotalRequests, defaultResult.TotalAmount),
         new PaymentSummaryItem(fallbackResult.TotalRequests, fallbackResult.TotalAmount)
-    ));
+    );
+    return Results.Ok(summary);
 });
 
 app.Run();
-
-
-public record PaymentRequest(Guid CorrelationId, decimal Amount);
-public record PaymentSummaryResponse(PaymentSummaryItem Default, PaymentSummaryItem Fallback);
-public record PaymentSummaryItem(int TotalRequests, decimal TotalAmount);
-
-public sealed record SummaryRow
-{
-    public SummaryRow() {}
-    public SummaryRow(string Processor, int TotalRequests, decimal TotalAmount)
-    {
-        this.Processor = Processor;
-        this.TotalRequests = TotalRequests;
-        this.TotalAmount = TotalAmount;
-    }
-
-    public string Processor { get; init; }
-    public int TotalRequests { get; init; }
-    public decimal TotalAmount { get; init; }
-}
