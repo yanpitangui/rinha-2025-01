@@ -11,14 +11,14 @@ public sealed class ServiceDeciderActor : ReceiveActor, IWithTimers
     private IActorRef _default;
     private IActorRef _fallback;
 
-    public ServiceDeciderActor(IHttpClientFactory factory, IActorRef stats)
+    public ServiceDeciderActor(IHttpClientFactory factory, string connectionString)
     {
         _factory = factory;
         _defaultClient = _factory.CreateClient("default");
         _fallbackClient = _factory.CreateClient("fallback");
 
-        _default = Context.ActorOf(Props.Create<PaymentProcessorActor>("default", _defaultClient, stats));
-        _fallback = Context.ActorOf(Props.Create<PaymentProcessorActor>("fallback", _fallbackClient, stats));
+        _default = Context.ActorOf(Props.Create<PaymentProcessorActor>("default", _defaultClient, connectionString));
+        _fallback = Context.ActorOf(Props.Create<PaymentProcessorActor>("fallback", _fallbackClient, connectionString));
         
         ReceiveAsync<Commands.Init>(async _ =>
         {
