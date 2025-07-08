@@ -1,6 +1,6 @@
 services:
   meu-backend:
-    image: rinha:dev
+    image: rinha:latest
     deploy:
       resources:
         limits:
@@ -9,6 +9,8 @@ services:
     networks:
       - backend
       - payment-processor
+    ports:
+      - "9999:8080"
     environment:
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
