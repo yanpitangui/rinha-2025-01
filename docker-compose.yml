@@ -11,6 +11,12 @@ x-service-templates:
       - payment-processor      
     depends_on:
       - rinha-db
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8080/healthz/akka || exit 1
+      interval: 5m
+      timeout: 3s
+      retries: 3
+      start_period: 2m
 
 services:
   backend-1:
@@ -44,8 +50,10 @@ services:
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
-      - backend-1
-      - backend-2
+      backend-1:
+        condition: service_healthy
+      backend-2:
+        condition: service_healthy
     networks:
       - backend
     deploy:

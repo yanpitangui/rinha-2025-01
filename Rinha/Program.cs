@@ -1,4 +1,5 @@
 using Akka.Actor;
+using Akka.HealthCheck.Hosting.Web;
 using Akka.Hosting;
 using Dapper;
 using Microsoft.AspNetCore.Mvc;
@@ -20,12 +21,11 @@ builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>();
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 var connectionString = builder.Configuration.GetConnectionString("postgres");
 
+builder.Services.AddHealthChecks();
+
 builder.Host.AddAkkaSetup();
 
 var app = builder.Build();
-
-
-app.MapGet("/", () => Results.Ok("OK"));
 
 app.MapPost("payments", ([FromBody] PaymentRequest request, [FromServices] IRequiredActor<RouterActor> decider) =>
 {
@@ -63,5 +63,7 @@ app.MapGet("/payments-summary", async ([FromQuery] DateTimeOffset? from, [FromQu
     );
     return Results.Ok(summary);
 });
+
+app.MapAkkaHealthCheckRoutes();
 
 app.Run();
