@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Akka.Cluster.Hosting" Version="1.5.45" />
         <PackageReference Include="Akka.Hosting" Version="1.5.45" />
         <PackageReference Include="Akka.Streams" Version="1.5.45" />
         <PackageReference Include="Dapper" Version="2.1.66" />

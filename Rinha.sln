@@ -8,6 +8,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External", "External", "{DD
 		init.sql = init.sql
 		Dockerfile = Dockerfile
 		.dockerignore = .dockerignore
+		haproxy.cfg = haproxy.cfg
 	EndProjectSection
 EndProject
 Global

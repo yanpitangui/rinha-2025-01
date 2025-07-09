@@ -1,23 +1,58 @@
-services:
-  meu-backend:
+x-service-templates:
+  backend: &backend
     image: rinha:latest
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: "250MB"
+          cpus: "0.5"
+          memory: "120MB"
     networks:
       - backend
-      - payment-processor
-    ports:
-      - "9999:8080"
+      - payment-processor      
+    depends_on:
+      - rinha-db
+
+services:
+  backend-1:
+    <<: *backend
+    container_name: backend-1
+    hostname: backend-1
     environment:
+      - Cluster__Ip=backend-1
+      - Cluster__Port=5213
+      - Cluster__Seeds__0=akka.tcp://Rinha@backend-1:5213
+      - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
       - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Minimum Pool Size=15;Maximum Pool Size=20;Connection Pruning Interval=3
+  backend-2:
+    <<: *backend
+    container_name: backend-2
+    hostname: backend-2
+    environment:
+      - Cluster__Ip=backend-2
+      - Cluster__Port=5214
+      - Cluster__Seeds__0=akka.tcp://Rinha@backend-1:5213
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__default=http://payment-processor-default:8080
+      - ConnectionStrings__fallback=http://payment-processor-fallback:8080
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Minimum Pool Size=15;Maximum Pool Size=20;Connection Pruning Interval=3
+  haproxy:
+    image: haproxy:alpine
+    ports:
+      - "9999:8080"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
-      - rinha-db
-    # etc...
+      - backend-1
+      - backend-2
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: "40MB"
   rinha-db:
     image: postgres:17-alpine
     networks:
@@ -33,8 +68,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: "100MB"
+          cpus: "0.3"
+          memory: "70MB"
 
 networks:
   backend:

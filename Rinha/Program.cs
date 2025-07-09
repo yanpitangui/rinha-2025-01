@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
 using Npgsql;
 using Rinha;
+using Rinha.Actors;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -16,29 +17,17 @@ builder.Services.AddHttpClient("fallback", o =>
     o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!));
 
 builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>();
-Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
-var connectionString = builder.Configuration.GetConnectionString("Postgres");
+DefaultTypeMap.MatchNamesWithUnderscores = true;
+var connectionString = builder.Configuration.GetConnectionString("postgres");
 
-builder.Services.AddAkka("rinha", (b, provider) =>
-{
-    b.WithActors((system, registry) =>
-    {
-        var decider = system.ActorOf(Props.Create<ServiceDeciderActor>
-            (provider.GetRequiredService<IHttpClientFactory>(), connectionString), "rinha");
-        registry.Register<ServiceDeciderActor>(decider);
-
-
-    });
-    b.AddStartup(async (s, r) =>
-    {
-        await r.Get<ServiceDeciderActor>()
-            .Ask(ServiceDeciderActor.Commands.Init.Instance);
-    });
-});
+builder.Host.AddAkkaSetup();
 
 var app = builder.Build();
 
-app.MapPost("payments", ([FromBody] PaymentRequest request, [FromServices] IRequiredActor<ServiceDeciderActor> decider) =>
+
+app.MapGet("/", () => Results.Ok("OK"));
+
+app.MapPost("payments", ([FromBody] PaymentRequest request, [FromServices] IRequiredActor<RouterActor> decider) =>
 {
     decider.ActorRef.Tell(request);
     return Results.Accepted();

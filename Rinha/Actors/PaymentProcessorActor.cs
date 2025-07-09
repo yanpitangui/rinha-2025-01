@@ -5,7 +5,7 @@ using Akka.Streams.Dsl;
 using Dapper;
 using Npgsql;
 
-namespace Rinha;
+namespace Rinha.Actors;
 
 public sealed class PaymentProcessorActor : ReceiveActor
 {
@@ -13,12 +13,11 @@ public sealed class PaymentProcessorActor : ReceiveActor
     private readonly HttpClient _client;
     private readonly string _connectionString;
 
-    public PaymentProcessorActor(string key, HttpClient httpClient, string connectionString)
+    public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString)
     {
         _key = key;
-        _client = httpClient;
+        _client = factory.CreateClient(key);
         _connectionString = connectionString;
-
         var writer = StartStream();
         Receive<PaymentRequest>(request => writer.WriteAsync(request).PipeTo(Self));
     }
