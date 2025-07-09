@@ -39,7 +39,7 @@ app.MapGet("/payments-summary", async ([FromQuery] DateTimeOffset? from, [FromQu
     await using var conn = new NpgsqlConnection(connectionString);
     await conn.OpenAsync();
 
-    var sql = @"
+    const string sql = @"
                 SELECT processor,
                        COUNT(*) AS total_requests,
                        SUM(amount) AS total_amount
@@ -62,6 +62,14 @@ app.MapGet("/payments-summary", async ([FromQuery] DateTimeOffset? from, [FromQu
         new PaymentSummaryItem(fallbackResult.TotalRequests, fallbackResult.TotalAmount)
     );
     return Results.Ok(summary);
+});
+
+app.MapPost("/purge-payments", async () =>
+{
+    await using var conn = new NpgsqlConnection(connectionString);
+    await conn.OpenAsync();
+    const string sql = "TRUNCATE TABLE payments";
+    await conn.ExecuteAsync(sql);
 });
 
 app.MapAkkaHealthCheckRoutes();

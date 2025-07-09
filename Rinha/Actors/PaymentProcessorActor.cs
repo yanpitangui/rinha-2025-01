@@ -29,7 +29,7 @@ public sealed class PaymentProcessorActor : ReceiveActor
         source
             .SelectAsyncUnordered(10, RequestPayment)
             .Where(result => result.IsSuccess)
-            .SelectAsync(5, PersistToPostgres)
+            .SelectAsyncUnordered(10, PersistToPostgres)
             .To(Sink.Ignore<PaymentResult>())
             .Run(Context.Materializer());
 

@@ -4,6 +4,7 @@ using Akka.HealthCheck.Hosting;
 using Akka.HealthCheck.Hosting.Web;
 using Akka.Hosting;
 using Akka.Remote.Hosting;
+using Akka.Routing;
 using Rinha.Actors;
 
 namespace Rinha;
@@ -47,9 +48,12 @@ public static class AkkaSetup
                 })
                 .WithActors((system, registry) =>
                 {
-                    var decider = system.ActorOf(Props.Create<RouterActor>
-                        (provider.GetRequiredService<IHttpClientFactory>(), registry.Get<HealthMonitorActor>(), connectionString), "rinha");
-                    registry.Register<RouterActor>(decider);
+                    var router = system.ActorOf(
+                        Props.Create<RouterActor>(provider.GetRequiredService<IHttpClientFactory>(),registry.Get<HealthMonitorActor>(), connectionString)
+                            .WithRouter(new RoundRobinPool(10)),
+                        "rinha");
+
+                    registry.Register<RouterActor>(router);
                 }).WithWebHealthCheck(provider);
                 
             });
