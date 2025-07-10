@@ -8,7 +8,7 @@ x-service-templates:
           memory: "100MB"
     networks:
       - backend
-      - payment-processor      
+      - payment-processor
     depends_on:
       - rinha-db
     healthcheck:
@@ -30,7 +30,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=128;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=512;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
   backend-2:
     <<: *backend
     container_name: backend-2
@@ -42,13 +42,13 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=128;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
-  haproxy:
-    image: haproxy:alpine
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=512;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "9999:8080"
-    volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
       backend-1:
         condition: service_healthy
@@ -64,7 +64,7 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "40MB"
+          memory: "50MB"
   rinha-db:
     image: postgres:17-alpine
     networks:
@@ -81,7 +81,7 @@ services:
       resources:
         limits:
           cpus: "0.3"
-          memory: "110MB"
+          memory: "100MB"
 
 networks:
   backend:

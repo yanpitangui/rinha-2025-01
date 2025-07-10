@@ -11,21 +11,19 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
 
     private readonly IActorRef _defaultPool;
     private readonly IActorRef _fallbackPool;
-
-    private readonly ILoggingAdapter _log = Context.GetLogger();
-
+    
     public RouterActor(IHttpClientFactory factory, IActorRef monitor, string connectionString)
     {
         _monitor = monitor;
 
         _defaultPool = Context.ActorOf(
-            Props.Create<PaymentProcessorActor>("default", factory, connectionString)
-                 .WithRouter(new RoundRobinPool(4)),
+            Props.Create<PaymentProcessorActor>("default", factory, connectionString, Self)
+                 .WithRouter(new SmallestMailboxPool(5)),
             "defaultPool");
 
         _fallbackPool = Context.ActorOf(
-            Props.Create<PaymentProcessorActor>("fallback", factory, connectionString)
-                 .WithRouter(new RoundRobinPool(4)),
+            Props.Create<PaymentProcessorActor>("fallback", factory, connectionString, Self)
+                 .WithRouter(new SmallestMailboxPool(5)),
             "fallbackPool");
 
         Receive<HealthMonitorActor.HealthUpdate>(update =>
@@ -49,17 +47,14 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
         {
             var retryCount = result.Request.RetryCount;
 
-            if (retryCount >= 5)
+            if (retryCount >= 2)
             {
-                _log.Debug("Request {0} permanently failed after retries", result.Request.CorrelationId);
                 return;
             }
 
             var backoff = CalculateBackoff(retryCount);
             var retry = result.Request with { RetryCount = retryCount + 1 };
-
-            _log.Debug("Retrying {0} in {1}", retry.CorrelationId, backoff);
-
+            
             IActorRef target;
             if (result.Key == "default")
                 target = _fallbackPool;

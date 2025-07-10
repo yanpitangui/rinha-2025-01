@@ -12,12 +12,14 @@ public sealed class PaymentProcessorActor : ReceiveActor
     private readonly string _key;
     private readonly HttpClient _client;
     private readonly string _connectionString;
+    private readonly IActorRef _router;
 
-    public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString)
+    public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString, IActorRef router)
     {
         _key = key;
         _client = factory.CreateClient(key);
         _connectionString = connectionString;
+        _router = router;
         var writer = StartStream();
         Receive<PaymentRequest>(request => writer.WriteAsync(request).PipeTo(Self));
     }
@@ -29,14 +31,13 @@ public sealed class PaymentProcessorActor : ReceiveActor
             .PreMaterialize(Context.System);
 
         var failureSink = Sink.ActorRef<PaymentResult>(
-            Context.Parent,
+            _router,
             onCompleteMessage: null
         );
 
         source
-            .SelectAsyncUnordered(10, RequestPayment)
+            .SelectAsyncUnordered(50, RequestPayment)
             .DivertTo(failureSink.Async(), result => !result.IsSuccess)
-            .SelectAsyncUnordered(10, PersistToPostgres)
             .To(Sink.Ignore<PaymentResult>())
             .Run(Context.Materializer());
 
@@ -55,7 +56,12 @@ public sealed class PaymentProcessorActor : ReceiveActor
                 requestedAt,
             });
 
-            return new PaymentResult(request, response.IsSuccessStatusCode, requestedAt, _key);
+            var result =  new PaymentResult(request, response.IsSuccessStatusCode, requestedAt, _key);
+            if (result.IsSuccess)
+            {
+                await PersistToPostgres(result);
+            }
+            return result;
         }
         catch
         {

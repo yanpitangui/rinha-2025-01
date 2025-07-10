@@ -50,7 +50,7 @@ public static class AkkaSetup
                 {
                     var router = system.ActorOf(
                         Props.Create<RouterActor>(provider.GetRequiredService<IHttpClientFactory>(),registry.Get<HealthMonitorActor>(), connectionString)
-                            .WithRouter(new RoundRobinPool(10)),
+                            .WithRouter(new SmallestMailboxPool(12)),
                         "rinha");
 
                     registry.Register<RouterActor>(router);
