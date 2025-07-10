@@ -22,7 +22,7 @@ public static class AkkaSetup
 
             var clusterConfigOptions = clusterConfig.Get<ClusterOptions>();
 
-            services.WithAkkaHealthCheck(HealthCheckType.All);
+            services.WithAkkaHealthCheck(HealthCheckType.Cluster | HealthCheckType.Default);
             services.AddAkka(actorSystemName, (b, provider) =>
             {
                 var clusterOptions = new Akka.Cluster.Hosting.ClusterOptions
