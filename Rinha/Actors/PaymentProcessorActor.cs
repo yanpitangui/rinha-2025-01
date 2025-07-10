@@ -24,11 +24,18 @@ public sealed class PaymentProcessorActor : ReceiveActor
 
     private ChannelWriter<PaymentRequest> StartStream()
     {
-        var (writer, source) = Source.Channel<PaymentRequest>(1000).PreMaterialize(Context.System);
+        var (writer, source) = Source
+            .Channel<PaymentRequest>(1000)
+            .PreMaterialize(Context.System);
+
+        var failureSink = Sink.ActorRef<PaymentResult>(
+            Context.Parent,
+            onCompleteMessage: null
+        );
 
         source
             .SelectAsyncUnordered(10, RequestPayment)
-            .Where(result => result.IsSuccess)
+            .DivertTo(failureSink.Async(), result => !result.IsSuccess)
             .SelectAsyncUnordered(10, PersistToPostgres)
             .To(Sink.Ignore<PaymentResult>())
             .Run(Context.Materializer());
@@ -48,11 +55,11 @@ public sealed class PaymentProcessorActor : ReceiveActor
                 requestedAt,
             });
 
-            return new PaymentResult(request, response.IsSuccessStatusCode, requestedAt);
+            return new PaymentResult(request, response.IsSuccessStatusCode, requestedAt, _key);
         }
         catch
         {
-            return new PaymentResult(request, false, requestedAt);
+            return new PaymentResult(request, false, requestedAt, _key);
         }
     }
 
@@ -76,5 +83,5 @@ public sealed class PaymentProcessorActor : ReceiveActor
         return request;
     }
 
-    private sealed record PaymentResult(PaymentRequest Request, bool IsSuccess, DateTimeOffset RequestedAt);
+    public sealed record PaymentResult(PaymentRequest Request, bool IsSuccess, DateTimeOffset RequestedAt, string Key);
 } 

@@ -1,4 +1,5 @@
 using Akka.Actor;
+using Akka.Event;
 
 namespace Rinha.Actors;
 
@@ -8,6 +9,7 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
     private Switch _switch = Switch.Default;
     private readonly IActorRef _default;
     private readonly IActorRef _fallback;
+    private readonly ILoggingAdapter _log = Context.GetLogger();
 
     public RouterActor(IHttpClientFactory factory, IActorRef monitor, string connectionString)
     {
@@ -32,7 +34,49 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
             }
         });
         
+        Receive<PaymentProcessorActor.PaymentResult>(result =>
+        {
+            var retryCount = result.Request.RetryCount;
 
+            if (retryCount >= 5)
+            {
+                _log.Debug("Request {0} permanently failed after retries", result.Request.CorrelationId);
+                return;
+            }
+
+            var backoff = CalculateBackoff(retryCount);
+            var retry = result.Request with { RetryCount = retryCount + 1 };
+
+            _log.Debug("Retrying {0} in {1}", retry.CorrelationId, backoff);
+
+            IActorRef target;
+            // Decide where to reprocess
+            if (result.Key == "default")
+                target = _fallback;
+            else
+                target = _default;
+            
+            Context.System.Scheduler.ScheduleTellOnce(
+                delay: backoff,
+                receiver: target,
+                message: retry,
+                sender: Self
+            );
+        });
+        
+
+    }
+    
+    private static TimeSpan CalculateBackoff(int retryCount)
+    {
+        var baseDelay = TimeSpan.FromMilliseconds(100); // start small
+        var maxDelay = TimeSpan.FromSeconds(5);
+
+        var exponential = TimeSpan.FromMilliseconds(baseDelay.TotalMilliseconds * Math.Pow(2, retryCount));
+
+        var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, 100));
+
+        return (exponential + jitter) > maxDelay ? maxDelay : exponential + jitter;
     }
 
     protected override void PreStart()

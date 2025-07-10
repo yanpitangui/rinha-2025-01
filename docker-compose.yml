@@ -63,8 +63,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
-          memory: "40MB"
+          cpus: "0.2"
+          memory: "30MB"
   rinha-db:
     image: postgres:17-alpine
     networks:
@@ -80,8 +80,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "80MB"
+          cpus: "0.3"
+          memory: "90MB"
 
 networks:
   backend:
