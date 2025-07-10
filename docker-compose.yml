@@ -5,7 +5,7 @@ x-service-templates:
       resources:
         limits:
           cpus: "0.5"
-          memory: "115MB"
+          memory: "100MB"
     networks:
       - backend
       - payment-processor      
@@ -64,7 +64,7 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "30MB"
+          memory: "40MB"
   rinha-db:
     image: postgres:17-alpine
     networks:
@@ -81,7 +81,7 @@ services:
       resources:
         limits:
           cpus: "0.3"
-          memory: "90MB"
+          memory: "110MB"
 
 networks:
   backend:
