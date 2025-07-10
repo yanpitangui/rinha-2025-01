@@ -1,5 +1,6 @@
 using Akka.Actor;
 using Akka.Event;
+using Akka.Routing;
 
 namespace Rinha.Actors;
 
@@ -7,33 +8,43 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
 {
     private readonly IActorRef _monitor;
     private Switch _switch = Switch.Default;
-    private readonly IActorRef _default;
-    private readonly IActorRef _fallback;
+
+    private readonly IActorRef _defaultPool;
+    private readonly IActorRef _fallbackPool;
+
     private readonly ILoggingAdapter _log = Context.GetLogger();
 
     public RouterActor(IHttpClientFactory factory, IActorRef monitor, string connectionString)
     {
         _monitor = monitor;
-        _default = Context.ActorOf(Props.Create<PaymentProcessorActor>("default", factory, connectionString));
-        _fallback = Context.ActorOf(Props.Create<PaymentProcessorActor>("fallback", factory, connectionString));
+
+        _defaultPool = Context.ActorOf(
+            Props.Create<PaymentProcessorActor>("default", factory, connectionString)
+                 .WithRouter(new RoundRobinPool(4)),
+            "defaultPool");
+
+        _fallbackPool = Context.ActorOf(
+            Props.Create<PaymentProcessorActor>("fallback", factory, connectionString)
+                 .WithRouter(new RoundRobinPool(4)),
+            "fallbackPool");
 
         Receive<HealthMonitorActor.HealthUpdate>(update =>
         {
             _switch = Decide(update.Default, update.Fallback);
         });
-        
+
         Receive<PaymentRequest>(req =>
         {
             if (_switch == Switch.Default)
             {
-                _default.Forward(req);
+                _defaultPool.Tell(req);
             }
             else
             {
-                _fallback.Forward(req);
+                _fallbackPool.Tell(req);
             }
         });
-        
+
         Receive<PaymentProcessorActor.PaymentResult>(result =>
         {
             var retryCount = result.Request.RetryCount;
@@ -50,12 +61,11 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
             _log.Debug("Retrying {0} in {1}", retry.CorrelationId, backoff);
 
             IActorRef target;
-            // Decide where to reprocess
             if (result.Key == "default")
-                target = _fallback;
+                target = _fallbackPool;
             else
-                target = _default;
-            
+                target = _defaultPool;
+
             Context.System.Scheduler.ScheduleTellOnce(
                 delay: backoff,
                 receiver: target,
@@ -63,19 +73,14 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
                 sender: Self
             );
         });
-        
-
     }
-    
+
     private static TimeSpan CalculateBackoff(int retryCount)
     {
-        var baseDelay = TimeSpan.FromMilliseconds(100); // start small
+        var baseDelay = TimeSpan.FromMilliseconds(100);
         var maxDelay = TimeSpan.FromSeconds(5);
-
         var exponential = TimeSpan.FromMilliseconds(baseDelay.TotalMilliseconds * Math.Pow(2, retryCount));
-
         var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, 100));
-
         return (exponential + jitter) > maxDelay ? maxDelay : exponential + jitter;
     }
 
@@ -95,20 +100,18 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
 
         if (main.Failing && !fallback.Failing)
             return Switch.Fallback;
-        
-        var multiplier = 2.5m;
 
+        var multiplier = 2.5m;
         return main.MinResponseTime <= fallback.MinResponseTime * multiplier
             ? Switch.Default
             : Switch.Fallback;
     }
 
     public ITimerScheduler Timers { get; set; } = null!;
-    
+
     private enum Switch
     {
         Default,
         Fallback
     }
 }
-
