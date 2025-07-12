@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Akka.Actor;
 using Akka.Streams;
 using Akka.Streams.Dsl;
@@ -11,9 +12,12 @@ public sealed class PaymentProcessorActor : ReceiveActor
     private readonly string _key;
     private readonly HttpClient _client;
     private readonly string _connectionString;
+    private readonly JsonSerializerOptions _options = new();
+
 
     public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString)
     {
+        _options.TypeInfoResolverChain.Insert(0, JsonContext.Default);
         _key = key;
         _client = factory.CreateClient(key);
         _connectionString = connectionString;
@@ -40,12 +44,12 @@ public sealed class PaymentProcessorActor : ReceiveActor
         var requestedAt = DateTimeOffset.UtcNow;
         try
         {
-            var response = await _client.PostAsJsonAsync("/payments", new
-            {
+            var response = await _client.PostAsJsonAsync("/payments", new ProcessorPaymentRequest
+            (
                 request.Amount,
-                request.CorrelationId,
                 requestedAt,
-            });
+                request.CorrelationId
+            ), _options);
 
             var result =  new PaymentResult(request, response.IsSuccessStatusCode, requestedAt, _key);
             if (result.IsSuccess)
@@ -78,5 +82,6 @@ public sealed class PaymentProcessorActor : ReceiveActor
         });
     }
 
+    public sealed record ProcessorPaymentRequest(decimal Amount, DateTimeOffset RequestedAt, Guid CorrelationId);
     public sealed record PaymentResult(PaymentRequest Request, bool IsSuccess, DateTimeOffset RequestedAt, string Key);
 } 

@@ -6,5 +6,5 @@ CREATE UNLOGGED TABLE payments (
 );
 
 -- Optional index for summary queries
-CREATE INDEX idx_requested_at ON payments(requested_at);
-create index idx_requested_at_processor ON payments(requested_at, processor);
+CREATE INDEX CONCURRENTLY idx_requested_at ON payments(requested_at);
+create index CONCURRENTLY idx_requested_at_processor ON payments(requested_at, processor);

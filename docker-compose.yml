@@ -5,12 +5,13 @@ x-service-templates:
       resources:
         limits:
           cpus: "0.5"
-          memory: "100MB"
+          memory: "90MB"
     networks:
       - backend
       - payment-processor
     depends_on:
-      - rinha-db
+      rinha-db:
+        condition: service_healthy
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:8080/healthz/akka || exit 1
       interval: 5m
@@ -30,7 +31,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=512;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Minimum Pool Size=128;Maximum Pool Size=512;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
   backend-2:
     <<: *backend
     container_name: backend-2
@@ -42,7 +43,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=512;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Minimum Pool Size=128;Maximum Pool Size=512;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
   nginx:
     image: nginx:alpine
     volumes:
@@ -64,9 +65,10 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "50MB"
+          memory: "70MB"
   rinha-db:
     image: postgres:17-alpine
+    command: 'postgres -c max_connections=512 -c synchronous_commit=off -c fsync=off -c full_page_writes=off'
     networks:
       - payment-processor
     volumes:
@@ -77,6 +79,11 @@ services:
       - POSTGRES_DB=rinha
     ports:
       - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d rinha" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:

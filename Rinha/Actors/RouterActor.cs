@@ -1,6 +1,4 @@
 using Akka.Actor;
-using Akka.Event;
-using Akka.Routing;
 
 namespace Rinha.Actors;
 

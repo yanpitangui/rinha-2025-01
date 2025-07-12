@@ -5,6 +5,7 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
         
     </PropertyGroup>
 
@@ -15,6 +16,7 @@
         <PackageReference Include="Akka.Hosting" Version="1.5.45" />
         <PackageReference Include="Akka.Streams" Version="1.5.45" />
         <PackageReference Include="Dapper" Version="2.1.66" />
+        <PackageReference Include="Dapper.AOT" Version="1.0.48" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" />
         <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.7" />
         <PackageReference Include="Npgsql" Version="9.0.3" />
