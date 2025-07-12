@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using Akka.Actor;
 using Akka.Streams;
 using Akka.Streams.Dsl;
@@ -12,32 +11,24 @@ public sealed class PaymentProcessorActor : ReceiveActor
     private readonly string _key;
     private readonly HttpClient _client;
     private readonly string _connectionString;
-    private readonly IActorRef _router;
 
-    public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString, IActorRef router)
+    public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString)
     {
         _key = key;
         _client = factory.CreateClient(key);
         _connectionString = connectionString;
-        _router = router;
         var writer = StartStream();
-        Receive<PaymentRequest>(request => writer.WriteAsync(request).PipeTo(Self));
+        Receive<PaymentRequest>(request => writer.Tell(request));
     }
 
-    private ChannelWriter<PaymentRequest> StartStream()
+    private IActorRef StartStream()
     {
         var (writer, source) = Source
-            .Channel<PaymentRequest>(1000)
+            .ActorRef<PaymentRequest>(1000, OverflowStrategy.DropTail)
             .PreMaterialize(Context.System);
-
-        var failureSink = Sink.ActorRef<PaymentResult>(
-            _router,
-            onCompleteMessage: null
-        );
-
+        
         source
-            .SelectAsyncUnordered(50, RequestPayment)
-            .DivertTo(failureSink.Async(), result => !result.IsSuccess)
+            .SelectAsyncUnordered(15, RequestPayment)
             .To(Sink.Ignore<PaymentResult>())
             .Run(Context.Materializer());
 
@@ -69,7 +60,7 @@ public sealed class PaymentProcessorActor : ReceiveActor
         }
     }
 
-    private async Task<PaymentResult> PersistToPostgres(PaymentResult request)
+    private async Task PersistToPostgres(PaymentResult request)
     {
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -85,8 +76,6 @@ public sealed class PaymentProcessorActor : ReceiveActor
             request.Request.Amount,
             request.RequestedAt
         });
-        
-        return request;
     }
 
     public sealed record PaymentResult(PaymentRequest Request, bool IsSuccess, DateTimeOffset RequestedAt, string Key);

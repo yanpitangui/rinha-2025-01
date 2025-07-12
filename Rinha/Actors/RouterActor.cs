@@ -12,19 +12,16 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
     private readonly IActorRef _defaultPool;
     private readonly IActorRef _fallbackPool;
     
-    public RouterActor(IHttpClientFactory factory, IActorRef monitor, string connectionString)
+    public RouterActor(
+        IActorRef monitor,
+        IActorRef defaultPool, 
+        IActorRef fallbackPool)
     {
         _monitor = monitor;
 
-        _defaultPool = Context.ActorOf(
-            Props.Create<PaymentProcessorActor>("default", factory, connectionString, Self)
-                 .WithRouter(new SmallestMailboxPool(5)),
-            "defaultPool");
+        _defaultPool = defaultPool;
 
-        _fallbackPool = Context.ActorOf(
-            Props.Create<PaymentProcessorActor>("fallback", factory, connectionString, Self)
-                 .WithRouter(new SmallestMailboxPool(5)),
-            "fallbackPool");
+        _fallbackPool = fallbackPool;
 
         Receive<HealthMonitorActor.HealthUpdate>(update =>
         {
@@ -42,41 +39,6 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
                 _fallbackPool.Tell(req);
             }
         });
-
-        Receive<PaymentProcessorActor.PaymentResult>(result =>
-        {
-            var retryCount = result.Request.RetryCount;
-
-            if (retryCount >= 2)
-            {
-                return;
-            }
-
-            var backoff = CalculateBackoff(retryCount);
-            var retry = result.Request with { RetryCount = retryCount + 1 };
-            
-            IActorRef target;
-            if (result.Key == "default")
-                target = _fallbackPool;
-            else
-                target = _defaultPool;
-
-            Context.System.Scheduler.ScheduleTellOnce(
-                delay: backoff,
-                receiver: target,
-                message: retry,
-                sender: Self
-            );
-        });
-    }
-
-    private static TimeSpan CalculateBackoff(int retryCount)
-    {
-        var baseDelay = TimeSpan.FromMilliseconds(100);
-        var maxDelay = TimeSpan.FromSeconds(5);
-        var exponential = TimeSpan.FromMilliseconds(baseDelay.TotalMilliseconds * Math.Pow(2, retryCount));
-        var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, 100));
-        return (exponential + jitter) > maxDelay ? maxDelay : exponential + jitter;
     }
 
     protected override void PreStart()

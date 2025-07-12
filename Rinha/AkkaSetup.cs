@@ -46,14 +46,26 @@ public static class AkkaSetup
                 {
                     Role = actorSystemName,
                 })
-                .WithActors((system, registry) =>
-                {
-                    var router = system.ActorOf(
-                        Props.Create<RouterActor>(provider.GetRequiredService<IHttpClientFactory>(),registry.Get<HealthMonitorActor>(), connectionString)
-                            .WithRouter(new SmallestMailboxPool(12)),
-                        "rinha");
+                .WithActors((system, registry, resolver) =>
+                    {
+                        var factory = resolver.GetService<IHttpClientFactory>();
+                        
+                        var defaultPool = system.ActorOf(Props
+                            .Create<PaymentProcessorActor>("default", factory, connectionString)
+                            .WithRouter(new SmallestMailboxPool(10)), "defaultPool");
+                        
+                        
+                        var fallbackPool = system.ActorOf(Props
+                            .Create<PaymentProcessorActor>("default", factory, connectionString)
+                            .WithRouter(new SmallestMailboxPool(10)), "fallbackPool");
+                        
+                        var router = system.ActorOf(
+                            Props.Create<RouterActor>(registry.Get<HealthMonitorActor>(), defaultPool, fallbackPool)
+                                .WithRouter(new SmallestMailboxPool(50)),
+                            "rinha");
 
-                    registry.Register<RouterActor>(router);
+                        registry.Register<RouterActor>(router);
+
                 }).WithWebHealthCheck(provider);
                 
             });
