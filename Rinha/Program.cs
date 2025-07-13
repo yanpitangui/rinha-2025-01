@@ -18,7 +18,9 @@ builder.Services.AddHttpClient("default", o =>
 
 builder.Services.AddHttpClient("fallback", o =>
     o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!));
-
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2Support", true);
+AppContext.SetSwitch("System.Globalization.Invariant", true);
 builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>();
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 var connectionString = builder.Configuration.GetConnectionString("postgres");

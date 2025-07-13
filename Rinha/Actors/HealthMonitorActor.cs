@@ -11,12 +11,9 @@ public class HealthMonitorActor : ReceiveActor, IWithTimers
     public ITimerScheduler Timers { get; set; } = null!;
     private ServiceHealth _defaultHealth = new();
     private ServiceHealth _fallbackHealth = new();
-    private readonly JsonSerializerOptions _options = new();
-
 
     public HealthMonitorActor(IHttpClientFactory factory)
     {
-        _options.TypeInfoResolverChain.Insert(0, JsonContext.Default);
         _default = factory.CreateClient("default");
         _fallback = factory.CreateClient("fallback");
 
@@ -44,7 +41,7 @@ public class HealthMonitorActor : ReceiveActor, IWithTimers
     
     private Task<ServiceHealth?> GetHealth(HttpClient client)
     {
-        return client.GetFromJsonAsync<ServiceHealth>("/payments/service-health", _options);
+        return client.GetFromJsonAsync<ServiceHealth>("/payments/service-health", JsonContext.Default.ServiceHealth);
     }
 
     private async Task Fetch()

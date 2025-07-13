@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Akka.Actor;
 using Akka.Streams;
 using Akka.Streams.Dsl;
@@ -12,12 +11,9 @@ public sealed class PaymentProcessorActor : ReceiveActor
     private readonly string _key;
     private readonly HttpClient _client;
     private readonly string _connectionString;
-    private readonly JsonSerializerOptions _options = new();
-
 
     public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString)
     {
-        _options.TypeInfoResolverChain.Insert(0, JsonContext.Default);
         _key = key;
         _client = factory.CreateClient(key);
         _connectionString = connectionString;
@@ -49,7 +45,7 @@ public sealed class PaymentProcessorActor : ReceiveActor
                 request.Amount,
                 requestedAt,
                 request.CorrelationId
-            ), _options);
+            ), JsonContext.Default.ProcessorPaymentRequest);
 
             var result =  new PaymentResult(request, response.IsSuccessStatusCode, requestedAt, _key);
             if (result.IsSuccess)
