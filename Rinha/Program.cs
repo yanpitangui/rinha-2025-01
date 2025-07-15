@@ -26,9 +26,9 @@ DefaultTypeMap.MatchNamesWithUnderscores = true;
 var connectionString = builder.Configuration.GetConnectionString("postgres");
 
 // warmup
-var warmupTasks = new List<Task>(50);
+var warmupTasks = new List<Task>(10);
     
-for (int i = 0; i < 50; i++)
+for (int i = 0; i < 10; i++)
 {
     warmupTasks.Add(Task.Run(async () =>
     {

@@ -30,8 +30,8 @@ public sealed class PaymentProcessorActor : ReceiveActor
         source
             .SelectAsyncUnordered(50, RequestPayment)
             .Where(x => x.IsSuccess)
-            .GroupedWithin(100, TimeSpan.FromMilliseconds(25))
-            .SelectAsync(10, PersistPayments)
+            .GroupedWithin(100, TimeSpan.FromMilliseconds(10))
+            .SelectAsync(20, PersistPayments)
             .To(Sink.Ignore<List<PaymentResult>>())
             .Run(Context.Materializer());
 
