@@ -28,8 +28,11 @@ public sealed class PaymentProcessorActor : ReceiveActor
             .PreMaterialize(Context.System);
         
         source
-            .SelectAsyncUnordered(15, RequestPayment)
-            .To(Sink.Ignore<PaymentResult>())
+            .SelectAsyncUnordered(50, RequestPayment)
+            .Where(x => x.IsSuccess)
+            .GroupedWithin(100, TimeSpan.FromMilliseconds(25))
+            .SelectAsync(10, PersistPayments)
+            .To(Sink.Ignore<List<PaymentResult>>())
             .Run(Context.Materializer());
 
         return writer;
@@ -48,16 +51,33 @@ public sealed class PaymentProcessorActor : ReceiveActor
             ), JsonContext.Default.ProcessorPaymentRequest);
 
             var result =  new PaymentResult(request, response.IsSuccessStatusCode, requestedAt, _key);
-            if (result.IsSuccess)
-            {
-                await PersistToPostgres(result);
-            }
             return result;
         }
         catch
         {
             return new PaymentResult(request, false, requestedAt, _key);
         }
+    }
+
+    private async Task<List<PaymentResult>> PersistPayments(IEnumerable<PaymentResult> batch)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
+        var batchList = batch.ToList();
+        await using var writer = await conn.BeginBinaryImportAsync(
+            "COPY payments (correlation_id, processor, amount, requested_at) FROM STDIN (FORMAT BINARY)");
+        foreach (var payment in batchList)
+        {
+            await writer.StartRowAsync();
+            await writer.WriteAsync(payment.Request.CorrelationId);
+            await writer.WriteAsync(_key); // processor
+            await writer.WriteAsync(payment.Request.Amount);
+            await writer.WriteAsync(payment.RequestedAt);
+        }
+        await writer.CompleteAsync();
+        
+        return batchList;
+        
     }
 
     private async Task PersistToPostgres(PaymentResult request)
