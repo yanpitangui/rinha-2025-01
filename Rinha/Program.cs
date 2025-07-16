@@ -116,6 +116,5 @@ app.Run();
 
 [JsonSerializable(typeof(PaymentRequest))]
 [JsonSerializable(typeof(PaymentSummaryResponse))]
-[JsonSerializable(typeof(HealthMonitorActor.ServiceHealth))]
 [JsonSerializable(typeof(PaymentProcessorActor.ProcessorPaymentRequest))]
 internal partial class JsonContext : JsonSerializerContext {}

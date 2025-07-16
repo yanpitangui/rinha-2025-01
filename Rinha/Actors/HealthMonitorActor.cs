@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Akka.Actor;
 
 namespace Rinha.Actors;
@@ -41,7 +40,7 @@ public class HealthMonitorActor : ReceiveActor, IWithTimers
     
     private Task<ServiceHealth?> GetHealth(HttpClient client)
     {
-        return client.GetFromJsonAsync<ServiceHealth>("/payments/service-health", JsonContext.Default.ServiceHealth);
+        return client.GetFromJsonAsync<ServiceHealth>("/payments/service-health");
     }
 
     private async Task Fetch()
@@ -82,8 +81,8 @@ public class HealthMonitorActor : ReceiveActor, IWithTimers
             this.MinResponseTime = MinResponseTime;
         }
 
-        public bool Failing { get; init; }
-        public decimal MinResponseTime { get; init; }
+        public bool Failing { get; set; }
+        public decimal MinResponseTime { get; set; }
         
     }
 }
