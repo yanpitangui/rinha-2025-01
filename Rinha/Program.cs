@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
 using Npgsql;
+using Polly;
+using Polly.Extensions.Http;
 using Rinha;
 using Rinha.Actors;
 [module:DapperAot]
@@ -14,16 +16,27 @@ using Rinha.Actors;
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.AddHttpClient("default", o =>
-    o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("default")!));
+    o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("default")!))
+    .AddPolicyHandler(GetRetryPolicy());
 
 builder.Services.AddHttpClient("fallback", o =>
-    o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!));
+    o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!))
+    .AddPolicyHandler(GetRetryPolicy());
+
 AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2Support", true);
 AppContext.SetSwitch("System.Globalization.Invariant", true);
 builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>();
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 var connectionString = builder.Configuration.GetConnectionString("postgres");
+
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2,
+            retryAttempt)));
+}
 
 // warmup
 var warmupTasks = new List<Task>(10);

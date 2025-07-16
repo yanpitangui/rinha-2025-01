@@ -2,7 +2,7 @@ using Akka.Actor;
 
 namespace Rinha.Actors;
 
-public sealed class RouterActor : ReceiveActor, IWithTimers
+public sealed class RouterActor : ReceiveActor
 {
     private readonly IActorRef _monitor;
     private Switch _switch = Switch.Default;
@@ -61,9 +61,7 @@ public sealed class RouterActor : ReceiveActor, IWithTimers
             ? Switch.Default
             : Switch.Fallback;
     }
-
-    public ITimerScheduler Timers { get; set; } = null!;
-
+    
     private enum Switch
     {
         Default,
