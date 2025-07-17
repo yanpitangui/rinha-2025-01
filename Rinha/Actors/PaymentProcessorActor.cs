@@ -23,19 +23,25 @@ public sealed class PaymentProcessorActor : ReceiveActor
 
     private IActorRef StartStream()
     {
-        var (writer, source) = Source
+        var materializer = Context.Materializer();
+        var (mainWriter, mainSource) = Source
             .ActorRef<PaymentRequest>(1000, OverflowStrategy.DropTail)
-            .PreMaterialize(Context.System);
+            .PreMaterialize(materializer);
         
-        source
+        var failureSink = Sink.ActorRef<PaymentResult>(
+            mainWriter,
+            onCompleteMessage: null
+        );
+        
+        mainSource
             .SelectAsyncUnordered(50, RequestPayment)
-            .Where(x => x.IsSuccess)
+            .DivertTo(failureSink, (result) => !result.IsSuccess)
             .GroupedWithin(100, TimeSpan.FromMilliseconds(10))
             .SelectAsync(20, PersistPayments)
             .To(Sink.Ignore<List<PaymentResult>>())
-            .Run(Context.Materializer());
+            .Run(materializer);
 
-        return writer;
+        return mainWriter;
     }
 
     private async Task<PaymentResult> RequestPayment(PaymentRequest request)

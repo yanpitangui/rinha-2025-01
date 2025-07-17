@@ -52,12 +52,12 @@ public static class AkkaSetup
                         
                         var defaultPool = system.ActorOf(Props
                             .Create<PaymentProcessorActor>("default", factory, connectionString)
-                            .WithRouter(new SmallestMailboxPool(10)), "defaultPool");
+                            .WithRouter(new SmallestMailboxPool(5)), "defaultPool");
                         
                         
                         var fallbackPool = system.ActorOf(Props
-                            .Create<PaymentProcessorActor>("default", factory, connectionString)
-                            .WithRouter(new SmallestMailboxPool(10)), "fallbackPool");
+                            .Create<PaymentProcessorActor>("fallback", factory, connectionString)
+                            .WithRouter(new SmallestMailboxPool(5)), "fallbackPool");
                         
                         var router = system.ActorOf(
                             Props.Create<RouterActor>(registry.Get<HealthMonitorActor>(), defaultPool, fallbackPool)
