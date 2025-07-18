@@ -12,20 +12,20 @@ public sealed class PaymentProcessorActor : ReceiveActor
     private readonly HttpClient _client;
     private readonly string _connectionString;
 
-    public PaymentProcessorActor(string key, IHttpClientFactory factory, string connectionString)
+    public PaymentProcessorActor(string key, IHttpClientFactory factory, ProcessorConfig config, string connectionString)
     {
         _key = key;
         _client = factory.CreateClient(key);
         _connectionString = connectionString;
-        var writer = StartStream();
+        var writer = StartStream(config);
         Receive<PaymentRequest>(request => writer.Tell(request));
     }
 
-    private IActorRef StartStream()
+    private IActorRef StartStream(ProcessorConfig config)
     {
         var materializer = Context.Materializer();
         var (mainWriter, mainSource) = Source
-            .ActorRef<PaymentRequest>(1000, OverflowStrategy.DropTail)
+            .ActorRef<object>(1000, OverflowStrategy.DropTail)
             .PreMaterialize(materializer);
         
         var failureSink = Sink.ActorRef<PaymentResult>(
@@ -34,18 +34,24 @@ public sealed class PaymentProcessorActor : ReceiveActor
         );
         
         mainSource
-            .SelectAsyncUnordered(50, RequestPayment)
+            .SelectAsyncUnordered(config.RequestPaymentParallelism, RequestPayment)
             .DivertTo(failureSink, (result) => !result.IsSuccess)
-            .GroupedWithin(100, TimeSpan.FromMilliseconds(10))
-            .SelectAsync(20, PersistPayments)
+            .GroupedWithin(config.GroupSize, TimeSpan.FromMilliseconds(config.Timeout))
+            .SelectAsync(config.PersistPaymentsParallelism, PersistPayments)
             .To(Sink.Ignore<List<PaymentResult>>())
             .Run(materializer);
 
         return mainWriter;
     }
 
-    private async Task<PaymentResult> RequestPayment(PaymentRequest request)
+    private async Task<PaymentResult> RequestPayment(object req)
     {
+        var request = req switch
+        {
+            PaymentRequest p => p,
+            PaymentResult r => r.Request,
+            _ => throw new ArgumentOutOfRangeException(nameof(req), req, null)
+        };
         var requestedAt = DateTimeOffset.UtcNow;
         try
         {
@@ -56,12 +62,12 @@ public sealed class PaymentProcessorActor : ReceiveActor
                 request.CorrelationId
             ), JsonContext.Default.ProcessorPaymentRequest);
 
-            var result =  new PaymentResult(request, response.IsSuccessStatusCode, requestedAt, _key);
+            var result =  new PaymentResult(request, response.IsSuccessStatusCode, requestedAt);
             return result;
         }
         catch
         {
-            return new PaymentResult(request, false, requestedAt, _key);
+            return new PaymentResult(request, false, requestedAt);
         }
     }
 
@@ -86,24 +92,6 @@ public sealed class PaymentProcessorActor : ReceiveActor
         
     }
 
-    private async Task PersistToPostgres(PaymentResult request)
-    {
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync();
-
-        const string sql = @"
-        INSERT INTO payments (correlation_id, processor, amount, requested_at)
-        VALUES (@CorrelationId, @Processor, @Amount, @RequestedAt);";
-        
-        await conn.ExecuteAsync(sql, new
-        {
-            request.Request.CorrelationId,
-            processor = _key,
-            request.Request.Amount,
-            request.RequestedAt
-        });
-    }
-
     public sealed record ProcessorPaymentRequest(decimal Amount, DateTimeOffset RequestedAt, Guid CorrelationId);
-    public sealed record PaymentResult(PaymentRequest Request, bool IsSuccess, DateTimeOffset RequestedAt, string Key);
+    public sealed record PaymentResult(PaymentRequest Request, bool IsSuccess, DateTimeOffset RequestedAt);
 } 

@@ -19,8 +19,17 @@ public static class AkkaSetup
             var connectionString = ctx.Configuration.GetConnectionString("postgres");
 
             var clusterConfig = ctx.Configuration.GetSection("Cluster");
-
             var clusterConfigOptions = clusterConfig.Get<ClusterOptions>();
+            
+            var poolConfig = ctx.Configuration.GetSection("Pool");
+            var poolConfigOptions = poolConfig.Get<PoolConfig>()!;
+            
+            Console.WriteLine(poolConfigOptions);
+            
+            var processorConfig = ctx.Configuration.GetSection("Processor");
+            var processorConfigOptions = processorConfig.Get<ProcessorConfig>()!;
+            
+            Console.WriteLine(processorConfigOptions);
 
             services.WithAkkaHealthCheck(HealthCheckType.Cluster | HealthCheckType.Default);
             services.AddAkka(actorSystemName, (b, provider) =>
@@ -51,17 +60,17 @@ public static class AkkaSetup
                         var factory = resolver.GetService<IHttpClientFactory>();
                         
                         var defaultPool = system.ActorOf(Props
-                            .Create<PaymentProcessorActor>("default", factory, connectionString)
-                            .WithRouter(new SmallestMailboxPool(5)), "defaultPool");
+                            .Create<PaymentProcessorActor>("default", factory, processorConfigOptions, connectionString)
+                            .WithRouter(new SmallestMailboxPool(poolConfigOptions.DefaultPoolSize)), "defaultPool");
                         
                         
                         var fallbackPool = system.ActorOf(Props
-                            .Create<PaymentProcessorActor>("fallback", factory, connectionString)
-                            .WithRouter(new SmallestMailboxPool(5)), "fallbackPool");
+                            .Create<PaymentProcessorActor>("fallback", factory, processorConfigOptions, connectionString)
+                            .WithRouter(new SmallestMailboxPool(poolConfigOptions.FallbackPoolSize)), "fallbackPool");
                         
                         var router = system.ActorOf(
                             Props.Create<RouterActor>(registry.Get<HealthMonitorActor>(), defaultPool, fallbackPool)
-                                .WithRouter(new SmallestMailboxPool(50)),
+                                .WithRouter(new SmallestMailboxPool(poolConfigOptions.RouterPoolSize)),
                             "rinha");
 
                         registry.Register<RouterActor>(router);
