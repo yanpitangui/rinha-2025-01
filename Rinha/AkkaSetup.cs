@@ -26,10 +26,10 @@ public static class AkkaSetup
             
             Console.WriteLine(poolConfigOptions);
             
-            var processorConfig = ctx.Configuration.GetSection("Processor");
-            var processorConfigOptions = processorConfig.Get<ProcessorConfig>()!;
+            var persisterConfig = ctx.Configuration.GetSection("Persister");
+            var persisterConfigOptions = persisterConfig.Get<PersisterConfig>()!;
             
-            Console.WriteLine(processorConfigOptions);
+            Console.WriteLine(persisterConfigOptions);
 
             services.WithAkkaHealthCheck(HealthCheckType.Cluster | HealthCheckType.Default);
             services.AddAkka(actorSystemName, (b, provider) =>
@@ -58,14 +58,18 @@ public static class AkkaSetup
                 .WithActors((system, registry, resolver) =>
                     {
                         var factory = resolver.GetService<IHttpClientFactory>();
+
+                        var persister = system.ActorOf(Props.Create<BatchPersisterActor>(
+                            connectionString, persisterConfigOptions));
+                        registry.Register<BatchPersisterActor>(persister);
                         
                         var defaultPool = system.ActorOf(Props
-                            .Create<PaymentProcessorActor>("default", factory, processorConfigOptions, connectionString)
+                            .Create<PaymentProcessorActor>("default", factory, persister)
                             .WithRouter(new SmallestMailboxPool(poolConfigOptions.DefaultPoolSize)), "defaultPool");
                         
                         
                         var fallbackPool = system.ActorOf(Props
-                            .Create<PaymentProcessorActor>("fallback", factory, processorConfigOptions, connectionString)
+                            .Create<PaymentProcessorActor>("fallback", factory, persister)
                             .WithRouter(new SmallestMailboxPool(poolConfigOptions.FallbackPoolSize)), "fallbackPool");
                         
                         var router = system.ActorOf(
