@@ -1,18 +1,15 @@
+using System.Threading.Channels;
 using Akka.Actor;
-using Akka.Streams;
-using Akka.Streams.Dsl;
-using Dapper;
-using Npgsql;
 
 namespace Rinha.Actors;
 
-public sealed class PaymentProcessorActor : ActorBase
+public sealed class PaymentProcessorActor : ActorBase, IWithTimers
 {
     private readonly string _key;
-    private readonly IActorRef _persister;
+    private readonly ChannelWriter<BatchPersister.Commands.PersistPayment> _persister;
     private readonly HttpClient _client;
 
-    public PaymentProcessorActor(string key, IHttpClientFactory factory, IActorRef persister)
+    public PaymentProcessorActor(string key, IHttpClientFactory factory, ChannelWriter<BatchPersister.Commands.PersistPayment> persister)
     {
         _key = key;
         _persister = persister;
@@ -33,17 +30,19 @@ public sealed class PaymentProcessorActor : ActorBase
 
             if (response.IsSuccessStatusCode)
             {
-                _persister.Tell(new BatchPersisterActor.Commands.PersistPayment
+                _persister.TryWrite(new BatchPersister.Commands.PersistPayment
                     (request.CorrelationId, request.Amount, requestedAt, _key));
             }
             else
             {
+                Timers.StartSingleTimer(request.CorrelationId, request, TimeSpan.FromSeconds(1));
                 Self.Tell(request);
             }
 
         }
         catch
         {
+            Timers.StartSingleTimer(request.CorrelationId, request, TimeSpan.FromSeconds(1));
             Self.Tell(request);
         }
     }
@@ -58,8 +57,9 @@ public sealed class PaymentProcessorActor : ActorBase
             _ => throw new ArgumentOutOfRangeException(nameof(message), message, null)
         };
         
-        RequestPayment(request).PipeTo(Self);
-        
+        Task.Run(() => RequestPayment(request));
         return true;
     }
+
+    public ITimerScheduler Timers { get; set; } = null!;
 } 

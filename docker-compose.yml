@@ -13,7 +13,7 @@ x-service-templates:
       rinha-db:
         condition: service_healthy
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8080/healthz/akka || exit 1
+      test: wget --no-verbose --tries=1 --spider http://localhost:8080/payments-summary || exit 1
       interval: 5m
       timeout: 3s
       retries: 3
@@ -33,11 +33,11 @@ services:
       - Pool__FallbackPoolSize=50
       - Pool__RouterPoolSize=100
       - Persister__PersistPaymentsParallelism=10
-      - Persister__GroupSize=200
-      - Persister__Timeout=10
+      - Persister__GroupSize=100
+      - Persister__Timeout=5
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=256;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
   backend-2:
     <<: *backend
     container_name: backend-2
@@ -51,11 +51,11 @@ services:
       - Pool__FallbackPoolSize=50
       - Pool__RouterPoolSize=100
       - Persister__PersistPaymentsParallelism=10
-      - Persister__GroupSize=200
-      - Persister__Timeout=10
+      - Persister__GroupSize=100
+      - Persister__Timeout=5
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=200;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
   nginx:
     image: nginx:alpine
     volumes:
@@ -92,7 +92,7 @@ services:
       - "5432:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -d rinha" ]
-      interval: 1s
+      interval: 3s
       timeout: 10s
       retries: 10
     deploy:

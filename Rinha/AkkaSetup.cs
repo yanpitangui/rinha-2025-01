@@ -5,6 +5,7 @@ using Akka.HealthCheck.Hosting.Web;
 using Akka.Hosting;
 using Akka.Remote.Hosting;
 using Akka.Routing;
+using Akka.Streams;
 using Rinha.Actors;
 
 namespace Rinha;
@@ -59,22 +60,21 @@ public static class AkkaSetup
                     {
                         var factory = resolver.GetService<IHttpClientFactory>();
 
-                        var persister = system.ActorOf(Props.Create<BatchPersisterActor>(
-                            connectionString, persisterConfigOptions));
-                        registry.Register<BatchPersisterActor>(persister);
+                        var persister = new BatchPersister(connectionString);
+                        var writer = persister.StartStream(persisterConfigOptions, system.Materializer());
                         
                         var defaultPool = system.ActorOf(Props
-                            .Create<PaymentProcessorActor>("default", factory, persister)
-                            .WithRouter(new SmallestMailboxPool(poolConfigOptions.DefaultPoolSize)), "defaultPool");
+                            .Create<PaymentProcessorActor>("default", factory, writer)
+                            .WithRouter(new RoundRobinPool(poolConfigOptions.DefaultPoolSize)), "defaultPool");
                         
                         
                         var fallbackPool = system.ActorOf(Props
-                            .Create<PaymentProcessorActor>("fallback", factory, persister)
-                            .WithRouter(new SmallestMailboxPool(poolConfigOptions.FallbackPoolSize)), "fallbackPool");
+                            .Create<PaymentProcessorActor>("fallback", factory, writer)
+                            .WithRouter(new RoundRobinPool(poolConfigOptions.FallbackPoolSize)), "fallbackPool");
                         
                         var router = system.ActorOf(
                             Props.Create<RouterActor>(registry.Get<HealthMonitorActor>(), defaultPool, fallbackPool)
-                                .WithRouter(new SmallestMailboxPool(poolConfigOptions.RouterPoolSize)),
+                                .WithRouter(new RoundRobinPool(poolConfigOptions.RouterPoolSize)),
                             "rinha");
 
                         registry.Register<RouterActor>(router);
