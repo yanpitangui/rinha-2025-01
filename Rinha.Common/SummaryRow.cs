@@ -1,4 +1,4 @@
-namespace Rinha;
+namespace Rinha.Common;
 
 public sealed record SummaryRow
 {

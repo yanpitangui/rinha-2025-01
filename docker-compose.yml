@@ -4,19 +4,25 @@ x-service-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.55"
-          memory: "100MB"
+          cpus: "0.2"
+          memory: "40MB"
     networks:
       - backend
       - payment-processor
     depends_on:
       rinha-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__redis=redis:6379
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8080/payments-summary || exit 1
-      interval: 5m
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/payments-summary"]
+      interval: 1s
       timeout: 3s
-      retries: 3
+      retries: 10
       start_period: 2m
 
 services:
@@ -24,38 +30,34 @@ services:
     <<: *backend
     container_name: backend-1
     hostname: backend-1
-    environment:
-      - Cluster__Ip=backend-1
-      - Cluster__Port=5213
-      - Cluster__Seeds__0=akka.tcp://Rinha@backend-1:5213
-      - ASPNETCORE_ENVIRONMENT=Production
-      - Pool__DefaultPoolSize=50
-      - Pool__FallbackPoolSize=50
-      - Pool__RouterPoolSize=100
-      - Persister__PersistPaymentsParallelism=10
-      - Persister__GroupSize=100
-      - Persister__Timeout=5
-      - ConnectionStrings__default=http://payment-processor-default:8080
-      - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
   backend-2:
     <<: *backend
     container_name: backend-2
     hostname: backend-2
+
+  worker: 
+    image: worker:latest
     environment:
-      - Cluster__Ip=backend-2
-      - Cluster__Port=5214
-      - Cluster__Seeds__0=akka.tcp://Rinha@backend-1:5213
-      - ASPNETCORE_ENVIRONMENT=Production
+      - DOTNETCORE_ENVIRONMENT=Production
       - Pool__DefaultPoolSize=50
       - Pool__FallbackPoolSize=50
       - Pool__RouterPoolSize=100
       - Persister__PersistPaymentsParallelism=10
       - Persister__GroupSize=100
       - Persister__Timeout=5
+      - ConnectionStrings__redis=redis:6379
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+    depends_on:
+      rinha-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: "110MB"
   nginx:
     image: nginx:alpine
     volumes:
@@ -78,6 +80,24 @@ services:
         limits:
           cpus: "0.2"
           memory: "50MB"
+  redis:
+    image: redis:alpine
+    hostname: redis
+    networks:
+      - backend
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: "30MB"
   rinha-db:
     image: postgres:17-alpine
     networks:
@@ -98,8 +118,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "100MB"
+          cpus: "0.3"
+          memory: "80MB"
 
 networks:
   backend:

@@ -8,6 +8,7 @@ ARG TARGETARCH
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["Rinha/Rinha.csproj", "Rinha/"]
+COPY ["Rinha.Common/Rinha.Common.csproj", "Rinha.Common/"]
 RUN dotnet restore "Rinha/Rinha.csproj" --arch $TARGETARCH
 COPY . .
 WORKDIR "/src/Rinha"

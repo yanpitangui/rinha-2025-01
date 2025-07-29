@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Akka.Actor;
+using Rinha.Common;
 
 namespace Rinha.Actors;
 
@@ -26,7 +27,7 @@ public sealed class PaymentProcessorActor : ActorBase, IWithTimers
                 request.Amount,
                 requestedAt,
                 request.CorrelationId
-            ), JsonContext.Default.ProcessorPaymentRequest);
+            ), WorkerContext.Default.ProcessorPaymentRequest);
 
             if (response.IsSuccessStatusCode)
             {

@@ -1,4 +1,5 @@
 using Akka.Actor;
+using Rinha.Common;
 
 namespace Rinha.Actors;
 

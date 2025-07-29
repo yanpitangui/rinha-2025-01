@@ -1,0 +1,36 @@
+﻿FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+USER $APP_UID
+WORKDIR /app
+EXPOSE 8080
+
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ARG TARGETARCH
+ARG BUILD_CONFIGURATION=Release
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       clang zlib1g-dev
+WORKDIR /src
+COPY ["Rinha.Api/Rinha.Api.csproj", "Rinha.Api/"]
+COPY ["Rinha.Common/Rinha.Common.csproj", "Rinha.Common/"]
+
+RUN dotnet restore "Rinha.Api/Rinha.Api.csproj" --arch $TARGETARCH
+COPY . .
+WORKDIR "/src/Rinha.Api"
+RUN dotnet build "./Rinha.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./Rinha.Api.csproj" -c $BUILD_CONFIGURATION --arch $TARGETARCH -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+    
+USER $APP_UID
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["./Rinha.Api"]

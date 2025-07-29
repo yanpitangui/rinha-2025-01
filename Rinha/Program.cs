@@ -1,19 +1,18 @@
-using System.Text.Json.Serialization;
+using System.Text.Json;
 using Akka.Actor;
-using Akka.HealthCheck.Hosting.Web;
 using Akka.Hosting;
 using Dapper;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
-using Npgsql;
 using Polly;
 using Polly.Extensions.Http;
 using Rinha;
 using Rinha.Actors;
-[module:DapperAot]
+using Rinha.Common;
+using StackExchange.Redis;
 
-var builder = WebApplication.CreateSlimBuilder(args);
+
+HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddHttpClient("default", o =>
     o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("default")!))
@@ -23,12 +22,15 @@ builder.Services.AddHttpClient("fallback", o =>
     o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!))
     .AddPolicyHandler(GetRetryPolicy());
 
-AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
-AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2Support", true);
-AppContext.SetSwitch("System.Globalization.Invariant", true);
 builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>();
 DefaultTypeMap.MatchNamesWithUnderscores = true;
-var connectionString = builder.Configuration.GetConnectionString("postgres");
+
+var redis = builder.Configuration.GetConnectionString("redis");
+var muxxer = ConnectionMultiplexer.Connect(redis, options =>
+{
+    options.AbortOnConnectFail = false;
+    options.ConnectRetry = 10;
+});
 
 static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
 {
@@ -38,96 +40,25 @@ static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
             retryAttempt)));
 }
 
-// warmup
-var warmupTasks = new List<Task>(10);
-    
-for (int i = 0; i < 10; i++)
-{
-    warmupTasks.Add(Task.Run(async () =>
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        const string sql = @"
-                SELECT processor,
-                       COUNT(*) AS total_requests,
-                       SUM(amount) AS total_amount
-                FROM payments
-                WHERE (@from IS NULL OR requested_at >= @from)
-                  AND (@to IS NULL OR requested_at <= @to)
-                GROUP BY processor;
-            ";
-
-        var results = await conn.QueryAsync<SummaryRow>(sql, new
-        {
-            from = (DateTimeOffset?)null, to = (DateTimeOffset?)null
-        });
-        results.ToList();
-    }));
-}
-
-await Task.WhenAll(warmupTasks);
-
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, JsonContext.Default);
 });
 
-builder.Services.AddHealthChecks();
-
-builder.Host.AddAkkaSetup();
+builder.AddAkkaSetup();
 
 var app = builder.Build();
+var registry = app.Services.GetRequiredService<ActorRegistry>();
+var router = registry.Get<RouterActor>();
 
-app.MapPost("payments", ([FromBody] PaymentRequest request, [FromServices] IRequiredActor<RouterActor> decider) =>
+var readTask = Task.Run(async () =>
 {
-    decider.ActorRef.Tell(request);
-    return Results.Accepted();
-});
-
-app.MapGet("/payments-summary", async ([FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to) =>
-{
-
-    await using var conn = new NpgsqlConnection(connectionString);
-    await conn.OpenAsync();
-
-    const string sql = @"
-                SELECT processor,
-                       COUNT(*) AS total_requests,
-                       SUM(amount) AS total_amount
-                FROM payments
-                WHERE (@from IS NULL OR requested_at >= @from)
-                  AND (@to IS NULL OR requested_at <= @to)
-                GROUP BY processor;
-            ";
-
-    var results = await conn.QueryAsync<SummaryRow>(sql, new
+    var subscriber = muxxer.GetSubscriber();
+    subscriber.Subscribe(RedisChannel.Literal("payment"), (_, value) =>
     {
-        from, to
+        var paymentRequest = JsonSerializer.Deserialize<PaymentRequest>(value.ToString(), JsonContext.Default.Options);
+        router.Tell(paymentRequest);
     });
-
-    var defaultResult = results.FirstOrDefault(r => r.Processor == "default") ?? new SummaryRow("default", 0, 0);
-    var fallbackResult = results.FirstOrDefault(r => r.Processor == "fallback") ?? new SummaryRow("fallback", 0, 0);
-
-    var summary = new PaymentSummaryResponse(
-        new PaymentSummaryItem(defaultResult.TotalRequests, defaultResult.TotalAmount),
-        new PaymentSummaryItem(fallbackResult.TotalRequests, fallbackResult.TotalAmount)
-    );
-    return Results.Ok(summary);
 });
-
-app.MapPost("/purge-payments", async () =>
-{
-    await using var conn = new NpgsqlConnection(connectionString);
-    await conn.OpenAsync();
-    const string sql = "TRUNCATE TABLE payments";
-    await conn.ExecuteAsync(sql);
-});
-
-app.MapAkkaHealthCheckRoutes();
 
 app.Run();
-
-[JsonSerializable(typeof(PaymentRequest))]
-[JsonSerializable(typeof(PaymentSummaryResponse))]
-[JsonSerializable(typeof(PaymentProcessorActor.ProcessorPaymentRequest))]
-internal partial class JsonContext : JsonSerializerContext {}

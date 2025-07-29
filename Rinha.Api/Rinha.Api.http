@@ -1,0 +1,15 @@
+@Rinha_HostAddress = http://localhost:9999
+
+POST {{Rinha_HostAddress}}/payments
+Content-Type: application/json
+
+{
+    "correlationId": "{{$random.uuid}}",
+    "amount": {{$randomInt 1 10000}}.{{$randomInt 0 99}}
+}
+
+###
+
+GET {{Rinha_HostAddress}}/payments-summary
+
+###

@@ -5,22 +5,25 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-        <InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
+        <ServerGarbageCollection>true</ServerGarbageCollection>
+        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+        <TieredCompilation>true</TieredCompilation>
+        <TieredPGO>true</TieredPGO>
         
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Akka.Cluster.Hosting" Version="1.5.46" />
-        <PackageReference Include="Akka.HealthCheck.Hosting" Version="1.5.37" />
-        <PackageReference Include="Akka.HealthCheck.Hosting.Web" Version="1.5.37" />
         <PackageReference Include="Akka.Hosting" Version="1.5.46" />
         <PackageReference Include="Akka.Streams" Version="1.5.46" />
         <PackageReference Include="Dapper" Version="2.1.66" />
         <PackageReference Include="Dapper.AOT" Version="1.0.48" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" />
-        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.7" />
         <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="9.0.7" />
         <PackageReference Include="Npgsql" Version="9.0.3" />
+        <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Rinha.Common\Rinha.Common.csproj" />
     </ItemGroup>
 
 </Project>

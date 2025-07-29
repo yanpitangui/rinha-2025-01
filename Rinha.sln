@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External", "External", "{DD
 		nginx.conf = nginx.conf
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rinha.Api", "Rinha.Api\Rinha.Api.csproj", "{39449765-134B-48AC-BCC1-AB17871D8BA5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rinha.Common", "Rinha.Common\Rinha.Common.csproj", "{9EA46D59-3459-4A3E-9E64-41CFF32D594D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,5 +25,13 @@ Global
 		{4F615342-550E-4497-9A04-22CBD5FEFB9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4F615342-550E-4497-9A04-22CBD5FEFB9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4F615342-550E-4497-9A04-22CBD5FEFB9B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{39449765-134B-48AC-BCC1-AB17871D8BA5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{39449765-134B-48AC-BCC1-AB17871D8BA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{39449765-134B-48AC-BCC1-AB17871D8BA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{39449765-134B-48AC-BCC1-AB17871D8BA5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9EA46D59-3459-4A3E-9E64-41CFF32D594D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9EA46D59-3459-4A3E-9E64-41CFF32D594D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9EA46D59-3459-4A3E-9E64-41CFF32D594D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9EA46D59-3459-4A3E-9E64-41CFF32D594D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

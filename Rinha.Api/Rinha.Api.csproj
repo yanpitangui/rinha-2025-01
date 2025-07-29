@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <PublishAot>true</PublishAot>
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+        <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
+        <OptimizationPreference>Speed</OptimizationPreference>
+        <ServerGarbageCollection>true</ServerGarbageCollection>
+        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+        <ReadyToRun>true</ReadyToRun>
+        <RetainVM>false</RetainVM>
+        <PublishTrimmed>true</PublishTrimmed>
+        <Trimming>true</Trimming>
+        <TrimMode>link</TrimMode>
+        <TieredPGO>true</TieredPGO>
+        <StripSymbols>true</StripSymbols>
+        <OptimizationLevel>Release</OptimizationLevel>
+        <EnableDynamicLoading>false</EnableDynamicLoading>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Rinha.Common\Rinha.Common.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Dapper" Version="2.1.66" />
+      <PackageReference Include="Dapper.AOT" Version="1.0.48" />
+      <PackageReference Include="Npgsql" Version="9.0.3" />
+      <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
+    </ItemGroup>
+
+</Project>
