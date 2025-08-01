@@ -1,11 +1,14 @@
-using System.Text.Json;
+using System.Buffers;
 using System.Threading.Channels;
 using Dapper;
 using Microsoft.AspNetCore.Mvc;
+using NATS.Client.Core;
+using NATS.Client.JetStream;
+using NATS.Client.JetStream.Models;
+using NATS.Net;
 using Npgsql;
+using Rinha.Api;
 using Rinha.Common;
-using StackExchange.Redis;
-using CommandFlags = StackExchange.Redis.CommandFlags;
 
 [module:DapperAot]
 
@@ -14,7 +17,7 @@ var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.AddServerHeader = false;
-    options.Limits.MaxRequestBodySize = 1024 * 8;
+    options.Limits.MaxRequestBodySize = 1024;
     options.Limits.MaxConcurrentConnections = 2048;
     options.Limits.MaxConcurrentUpgradedConnections = 1024;
     options.AllowSynchronousIO = false;
@@ -26,15 +29,22 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var connectionString = builder.Configuration.GetConnectionString("postgres");
-var redis = builder.Configuration.GetConnectionString("redis");
+var nats = builder.Configuration.GetConnectionString("nats");
 var source = new NpgsqlDataSourceBuilder(connectionString).Build();
 var app = builder.Build();
-var redisChannel = Channel.CreateUnbounded<PaymentRequest>(new UnboundedChannelOptions() { SingleReader = true, SingleWriter = false });
-app.MapPost("payments", ([FromBody] PaymentRequest request) =>
+var natsChannel = Channel.CreateUnbounded<MemoryStreamManager.PooledBuffer>(new UnboundedChannelOptions() { SingleReader = false, SingleWriter = false });
+app.MapPost("/payments", async context =>
 {
-    _ = redisChannel.Writer.TryWrite(request);
-    return Results.Accepted();
+    var length = (int)context.Request.ContentLength;
+    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+    
+    await context.Request.Body.ReadExactlyAsync(rented.AsMemory(0, length));
+    
+    var pooledBuffer = new MemoryStreamManager.PooledBuffer(rented, length);
+    natsChannel.Writer.TryWrite(pooledBuffer);
+    context.Response.StatusCode = StatusCodes.Status202Accepted;
 });
+
 
 app.MapGet("/payments-summary", async ([FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to) =>
 {
@@ -65,7 +75,7 @@ app.MapGet("/payments-summary", async ([FromQuery] DateTimeOffset? from, [FromQu
     return Results.Ok(summary);
 });
 
-app.MapPost("/purge-payments", async ([FromServices] NpgsqlDataSource source) =>
+app.MapPost("/purge-payments", async () =>
 {
     await using var conn = await source.OpenConnectionAsync();
     const string sql = "TRUNCATE TABLE payments";
@@ -74,7 +84,17 @@ app.MapPost("/purge-payments", async ([FromServices] NpgsqlDataSource source) =>
 
 // warmup
 var warmupTasks = new List<Task>(10);
-    
+
+var natsConnection = new NatsConnection(new NatsOpts
+{
+    Url = nats
+});
+
+INatsJSContext js = natsConnection.CreateJetStreamContext();
+
+await js.CreateOrUpdateStreamAsync(new StreamConfig(name: "payments", subjects: ["payments"]));
+
+
 for (int i = 0; i < 10; i++)
 {
     warmupTasks.Add(Task.Run(async () =>
@@ -99,25 +119,34 @@ for (int i = 0; i < 10; i++)
     
     warmupTasks.Add(Task.Run(async () =>
     {
-        var conn = await ConnectionMultiplexer.ConnectAsync(redis);
-        await conn.GetDatabase().PingAsync();
+        await natsConnection.PingAsync();
     }));
 }
 
 await Task.WhenAll(warmupTasks);
 
-Task.Run(async () =>
-{
-    var connection = await ConnectionMultiplexer.ConnectAsync(redis);
-    var pub = connection.GetSubscriber();
 
-    while (await redisChannel.Reader.WaitToReadAsync())
+for (int i = 0; i < Environment.ProcessorCount; i++)
+{
+    Task.Run(async () =>
     {
-        while (redisChannel.Reader.TryRead(out var msg))
+        while (await natsChannel.Reader.WaitToReadAsync())
         {
-            await pub.PublishAsync("payments", JsonSerializer.SerializeToUtf8Bytes(msg, JsonContext.Default.PaymentRequest), CommandFlags.FireAndForget);
+            while (natsChannel.Reader.TryRead(out var msg))
+            {
+                try
+                {
+                    await js.PublishConcurrentAsync($"payments.{Guid.NewGuid()}", msg.Buffer.AsMemory(0, msg.Length));
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(msg.Buffer);
+                }
+            }
         }
-    }
-});
+    });
+}
 
 app.Run();
+
+

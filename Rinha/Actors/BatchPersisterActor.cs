@@ -1,8 +1,6 @@
 using System.Threading.Channels;
-using Akka.Actor;
 using Akka.Streams;
 using Akka.Streams.Dsl;
-using Dapper;
 using Npgsql;
 
 namespace Rinha.Actors;
@@ -39,32 +37,17 @@ public class BatchPersister
 
         var batchList = batch.ToList();
 
-        if (batchList.Count == 1)
+        await using var writer = await conn.BeginBinaryImportAsync(
+            "COPY payments (correlation_id, processor, amount, requested_at) FROM STDIN (FORMAT BINARY)");
+        foreach (var payment in batchList)
         {
-            const string sql = @"INSERT INTO payments (correlation_id, processor, amount, requested_at) 
-                                VALUES (@CorrelationId, @processor, @amount, @RequestedAt)";
-            await conn.ExecuteAsync(sql, new
-            {
-                batchList[0].CorrelationId,
-                batchList[0].Amount,
-                processor = batchList[0].Key,
-                batchList[0].RequestedAt,   
-            });
+            await writer.StartRowAsync();
+            await writer.WriteAsync(payment.CorrelationId);
+            await writer.WriteAsync(payment.Key);
+            await writer.WriteAsync(payment.Amount);
+            await writer.WriteAsync(payment.RequestedAt);
         }
-        else
-        {
-            await using var writer = await conn.BeginBinaryImportAsync(
-                "COPY payments (correlation_id, processor, amount, requested_at) FROM STDIN (FORMAT BINARY)");
-            foreach (var payment in batchList)
-            {
-                await writer.StartRowAsync();
-                await writer.WriteAsync(payment.CorrelationId);
-                await writer.WriteAsync(payment.Key);
-                await writer.WriteAsync(payment.Amount);
-                await writer.WriteAsync(payment.RequestedAt);
-            }
-            await writer.CompleteAsync();
-        }
+        await writer.CompleteAsync();
 
         
         return batchList;

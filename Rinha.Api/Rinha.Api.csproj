@@ -15,11 +15,8 @@
         <ServerGarbageCollection>true</ServerGarbageCollection>
         <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
         <ReadyToRun>true</ReadyToRun>
-        <RetainVM>false</RetainVM>
         <PublishTrimmed>true</PublishTrimmed>
         <Trimming>true</Trimming>
-        <TrimMode>link</TrimMode>
-        <TieredPGO>true</TieredPGO>
         <StripSymbols>true</StripSymbols>
         <OptimizationLevel>Release</OptimizationLevel>
         <EnableDynamicLoading>false</EnableDynamicLoading>
@@ -32,8 +29,9 @@
     <ItemGroup>
       <PackageReference Include="Dapper" Version="2.1.66" />
       <PackageReference Include="Dapper.AOT" Version="1.0.48" />
+      <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+      <PackageReference Include="NATS.Net" Version="2.6.5" />
       <PackageReference Include="Npgsql" Version="9.0.3" />
-      <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
     </ItemGroup>
 
 </Project>

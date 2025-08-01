@@ -4,19 +4,19 @@ x-service-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "40MB"
+          cpus: "0.3"
+          memory: "50MB"
     networks:
       - backend
       - payment-processor
     depends_on:
       rinha-db:
         condition: service_healthy
-      redis:
+      nats:
         condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__redis=redis:6379
+      - ConnectionStrings__nats=nats:4222
       - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/payments-summary"]
@@ -45,13 +45,17 @@ services:
       - Persister__PersistPaymentsParallelism=10
       - Persister__GroupSize=100
       - Persister__Timeout=5
-      - ConnectionStrings__redis=redis:6379
+      - ConnectionStrings__nats=nats:4222
+      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
+    networks:
+      - backend
+      - payment-processor
     depends_on:
       rinha-db:
         condition: service_healthy
-      redis:
+      nats:
         condition: service_healthy
     deploy:
       resources:
@@ -80,28 +84,30 @@ services:
         limits:
           cpus: "0.2"
           memory: "50MB"
-  redis:
-    image: redis:alpine
-    hostname: redis
+  nats:
+    image: nats:alpine
+    hostname: nats
     networks:
       - backend
     ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+      - "4222:4222"
+    command: -js
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD", "nats-server", "--version" ]
       interval: 1s
       timeout: 5s
       retries: 10
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "30MB"
+          cpus: "0.1"
+          memory: "20MB"
+  
   rinha-db:
     image: postgres:17-alpine
     networks:
       - payment-processor
+    command: 'postgres -c max_connections=400 -c synchronous_commit=off -c fsync=off -c full_page_writes=off'
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
@@ -118,8 +124,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
-          memory: "80MB"
+          cpus: "0.2"
+          memory: "100MB"
 
 networks:
   backend:

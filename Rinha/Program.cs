@@ -1,16 +1,17 @@
 using System.Text.Json;
 using Akka.Actor;
 using Akka.Hosting;
-using Dapper;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
+using NATS.Client.Core;
+using NATS.Client.JetStream;
+using NATS.Client.JetStream.Models;
+using NATS.Net;
 using Polly;
 using Polly.Extensions.Http;
 using Rinha;
 using Rinha.Actors;
 using Rinha.Common;
-using StackExchange.Redis;
-
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
@@ -23,14 +24,7 @@ builder.Services.AddHttpClient("fallback", o =>
     .AddPolicyHandler(GetRetryPolicy());
 
 builder.Services.RemoveAll<IHttpMessageHandlerBuilderFilter>();
-DefaultTypeMap.MatchNamesWithUnderscores = true;
-
-var redis = builder.Configuration.GetConnectionString("redis");
-var muxxer = ConnectionMultiplexer.Connect(redis, options =>
-{
-    options.AbortOnConnectFail = false;
-    options.ConnectRetry = 10;
-});
+var nats = builder.Configuration.GetConnectionString("nats");
 
 static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
 {
@@ -47,18 +41,36 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.AddAkkaSetup();
 
-var app = builder.Build();
-var registry = app.Services.GetRequiredService<ActorRegistry>();
-var router = registry.Get<RouterActor>();
-
-var readTask = Task.Run(async () =>
+var natsConnection = new NatsConnection(new NatsOpts
 {
-    var subscriber = muxxer.GetSubscriber();
-    subscriber.Subscribe(RedisChannel.Literal("payment"), (_, value) =>
+    Url = nats,
+    SerializerRegistry = new NatsJsonContextSerializerRegistry(JsonContext.Default),
+});
+
+INatsJSContext js = natsConnection.CreateJetStreamContext();
+
+var stream = await js.CreateOrUpdateStreamAsync(new StreamConfig(name: "payments", subjects: ["payments.>"]));
+
+
+var app = builder.Build();
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStarted.Register(async () =>
+{
+    var registry = app.Services.GetRequiredService<ActorRegistry>();
+    var router = registry.Get<RouterActor>();
+    INatsJSConsumer consumer = await stream.CreateOrUpdateConsumerAsync(new ConsumerConfig("payments"));
+    while (true)
     {
-        var paymentRequest = JsonSerializer.Deserialize<PaymentRequest>(value.ToString(), JsonContext.Default.Options);
-        router.Tell(paymentRequest);
-    });
+        const int batchSize = 100;
+
+        await foreach (var msg in consumer.ConsumeAsync<PaymentRequest>(opts: new NatsJSConsumeOpts
+                           { MaxMsgs = batchSize }))
+        {
+            await msg.AckAsync();
+            router.Tell(msg.Data!);
+        }
+    }
+
 });
 
 app.Run();
