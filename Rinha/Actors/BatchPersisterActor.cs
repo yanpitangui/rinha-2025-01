@@ -7,20 +7,20 @@ namespace Rinha.Actors;
 
 public class BatchPersister
 {
-    private readonly string _connectionString;
+    private readonly NpgsqlDataSource _source;
     
-    public BatchPersister(string connectionString)
+    public BatchPersister(NpgsqlDataSource source)
     {
-        _connectionString = connectionString;
+        _source = source;
     }
     
     public ChannelWriter<Commands.PersistPayment> StartStream(PersisterConfig config, IMaterializer materializer)
     {
         var (mainWriter, mainSource) = Source.Channel<Commands.PersistPayment>
-                (5000, fullMode: BoundedChannelFullMode.DropWrite)
+                (10000, fullMode: BoundedChannelFullMode.Wait)
             .PreMaterialize(materializer);
-        
         mainSource
+            .AddAttributes(Attributes.CreateInputBuffer(1, 1))
             .GroupedWithin(config.GroupSize, TimeSpan.FromMilliseconds(config.Timeout))
             .SelectAsync(config.PersistPaymentsParallelism, PersistPayments)
             .To(Sink.Ignore<List<Commands.PersistPayment>>())
@@ -32,8 +32,7 @@ public class BatchPersister
     
     private async Task<List<Commands.PersistPayment>> PersistPayments(IEnumerable<Commands.PersistPayment> batch)
     {
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync();
+        await using var conn = await _source.OpenConnectionAsync();
 
         var batchList = batch.ToList();
 
@@ -49,13 +48,16 @@ public class BatchPersister
         }
         await writer.CompleteAsync();
 
-        
+        foreach (var payment in batchList)
+        {
+            payment.Tcs.SetResult();
+        }
         return batchList;
         
     }
 
     public static class Commands
     {
-        public record PersistPayment(Guid CorrelationId, decimal Amount, DateTimeOffset RequestedAt, string Key);
+        public record PersistPayment(Guid CorrelationId, decimal Amount, DateTimeOffset RequestedAt, string Key, TaskCompletionSource Tcs);
     }
 }

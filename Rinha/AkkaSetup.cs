@@ -2,6 +2,7 @@ using Akka.Actor;
 using Akka.Hosting;
 using Akka.Routing;
 using Akka.Streams;
+using Npgsql;
 using Rinha.Actors;
 
 namespace Rinha;
@@ -13,7 +14,8 @@ public static class AkkaSetup
         const string actorSystemName = "Rinha";
 
         var connectionString = builder.Configuration.GetConnectionString("postgres");
-        
+        var source = new NpgsqlDataSourceBuilder(connectionString).Build();
+
         var poolConfig = builder.Configuration.GetSection("Pool");
         var poolConfigOptions = poolConfig.Get<PoolConfig>()!;
         
@@ -33,21 +35,23 @@ public static class AkkaSetup
 
                     var monitor = system.ActorOf(Props.Create<HealthMonitorActor>(factory));
                     registry.Register<HealthMonitorActor>(monitor);
-                    var persister = new BatchPersister(connectionString);
-                    var writer = persister.StartStream(persisterConfigOptions, system.Materializer());
+                    var persister = new BatchPersister(source);
+                    var defaultWriter = persister.StartStream(persisterConfigOptions, system.Materializer());
+                    var fallbackWriter = persister.StartStream(persisterConfigOptions, system.Materializer());
 
+                    
                     var defaultPool = system.ActorOf(Props
-                        .Create<PaymentProcessorActor>("default", factory, writer)
-                        .WithRouter(new RoundRobinPool(poolConfigOptions.DefaultPoolSize)), "defaultPool");
+                        .Create<PaymentProcessorActor>("default", factory, defaultWriter)
+                        .WithRouter(new RoundRobinPool(poolConfigOptions.DefaultPoolSize, new DefaultResizer(poolConfigOptions.DefaultPoolSize, 300))), "defaultPool");
 
 
                     var fallbackPool = system.ActorOf(Props
-                        .Create<PaymentProcessorActor>("fallback", factory, writer)
-                        .WithRouter(new RoundRobinPool(poolConfigOptions.FallbackPoolSize)), "fallbackPool");
+                        .Create<PaymentProcessorActor>("fallback", factory, fallbackWriter)
+                        .WithRouter(new RoundRobinPool(poolConfigOptions.FallbackPoolSize,  new DefaultResizer(poolConfigOptions.FallbackPoolSize, 300))), "fallbackPool");
 
                     var router = system.ActorOf(
                         Props.Create<RouterActor>(registry.Get<HealthMonitorActor>(), defaultPool, fallbackPool)
-                            .WithRouter(new RoundRobinPool(poolConfigOptions.RouterPoolSize)),
+                            .WithRouter(new RoundRobinPool(poolConfigOptions.RouterPoolSize,  new DefaultResizer(poolConfigOptions.RouterPoolSize, 300))),
                         "rinha");
 
                     registry.Register<RouterActor>(router);

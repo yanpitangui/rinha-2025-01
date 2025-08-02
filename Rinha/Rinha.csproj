@@ -5,9 +5,8 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-        <ServerGarbageCollection>true</ServerGarbageCollection>
-        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
         <TieredCompilation>true</TieredCompilation>
+        <GarbageCollectionAdaptationMode>0</GarbageCollectionAdaptationMode>
         <TieredPGO>true</TieredPGO>
         
     </PropertyGroup>
