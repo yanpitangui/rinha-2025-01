@@ -1,15 +1,15 @@
-﻿FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+﻿FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS base
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
 
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS build
 ARG TARGETARCH
 ARG BUILD_CONFIGURATION=Release
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       clang zlib1g-dev
+RUN apk update \
+    && apk add build-base zlib-dev
+    
 WORKDIR /src
 COPY ["Rinha.Api/Rinha.Api.csproj", "Rinha.Api/"]
 COPY ["Rinha.Common/Rinha.Common.csproj", "Rinha.Common/"]
@@ -26,9 +26,6 @@ RUN dotnet publish "./Rinha.Api.csproj" -c $BUILD_CONFIGURATION --arch $TARGETAR
 FROM base AS final
 
 USER root
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
     
 RUN mkdir -p /sockets && \
     chown -R $APP_UID:$APP_UID /sockets

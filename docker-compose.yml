@@ -37,9 +37,9 @@ services:
     environment:
       - DOTNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_ENVIRONMENT=Production
-      - Pool__DefaultPoolSize=50
-      - Pool__FallbackPoolSize=50
-      - Pool__RouterPoolSize=100
+      - Pool__DefaultPoolSize=10
+      - Pool__FallbackPoolSize=10
+      - Pool__RouterPoolSize=5
       - Persister__PersistPaymentsParallelism=50
       - Persister__GroupSize=100
       - Persister__Timeout=10
