@@ -9,6 +9,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External", "External", "{DD
 		Dockerfile = Dockerfile
 		.dockerignore = .dockerignore
 		nginx.conf = nginx.conf
+		.github\workflows\docker-publish.yml = .github\workflows\docker-publish.yml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rinha.Api", "Rinha.Api\Rinha.Api.csproj", "{39449765-134B-48AC-BCC1-AB17871D8BA5}"
