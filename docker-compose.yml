@@ -4,8 +4,8 @@ x-service-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
-          memory: "50MB"
+          cpus: "0.4"
+          memory: "35MB"
     networks:
       - backend
       - payment-processor
@@ -14,16 +14,13 @@ x-service-templates:
         condition: service_healthy
       nats:
         condition: service_healthy
+    volumes:
+      - postgres-socket:/var/run/postgresql
+      - uds-sockets:/sockets
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__nats=nats:4222
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/payments-summary"]
-      interval: 1s
-      timeout: 3s
-      retries: 10
-      start_period: 2m
+      - ConnectionStrings__postgres=Host=/var/run/postgresql;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
 
 services:
   backend-1:
@@ -39,16 +36,19 @@ services:
     image: worker:latest
     environment:
       - DOTNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=Production
       - Pool__DefaultPoolSize=50
       - Pool__FallbackPoolSize=50
       - Pool__RouterPoolSize=100
-      - Persister__PersistPaymentsParallelism=10
+      - Persister__PersistPaymentsParallelism=50
       - Persister__GroupSize=100
-      - Persister__Timeout=5
+      - Persister__Timeout=10
       - ConnectionStrings__nats=nats:4222
-      - ConnectionStrings__postgres=Host=rinha-db;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
+      - ConnectionStrings__postgres=Host=/var/run/postgresql;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=5;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
       - ConnectionStrings__default=http://payment-processor-default:8080
       - ConnectionStrings__fallback=http://payment-processor-fallback:8080
+    volumes:
+      - postgres-socket:/var/run/postgresql
     networks:
       - backend
       - payment-processor
@@ -60,19 +60,18 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: "110MB"
+          cpus: "0.2"
+          memory: "120MB"
   nginx:
     image: nginx:alpine
     volumes:
+      - uds-sockets:/sockets
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "9999:8080"
     depends_on:
-      backend-1:
-        condition: service_healthy
-      backend-2:
-        condition: service_healthy
+      - backend-1
+      - backend-2
     networks:
       - backend
     ulimits:
@@ -91,7 +90,6 @@ services:
       - backend
     ports:
       - "4222:4222"
-    command: -js
     healthcheck:
       test: [ "CMD", "nats-server", "--version" ]
       interval: 1s
@@ -109,6 +107,7 @@ services:
       - payment-processor
     command: 'postgres -c max_connections=400 -c synchronous_commit=off -c fsync=off -c full_page_writes=off'
     volumes:
+      - postgres-socket:/var/run/postgresql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       - POSTGRES_PASSWORD=postgres
@@ -125,8 +124,10 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "100MB"
-
+          memory: "90MB"
+volumes:
+  postgres-socket:
+  uds-sockets:
 networks:
   backend:
     driver: bridge

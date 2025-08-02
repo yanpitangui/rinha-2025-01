@@ -1,11 +1,10 @@
 using System.Buffers;
+using System.Diagnostics;
+using System.Net;
 using System.Threading.Channels;
 using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using NATS.Client.Core;
-using NATS.Client.JetStream;
-using NATS.Client.JetStream.Models;
-using NATS.Net;
 using Npgsql;
 using Rinha.Api;
 using Rinha.Common;
@@ -26,6 +25,13 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, JsonContext.Default);
+});
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    var hostname = Dns.GetHostName();
+    options.ListenUnixSocket($"/sockets/{hostname}.sock");
+    Console.WriteLine(hostname);
 });
 
 var connectionString = builder.Configuration.GetConnectionString("postgres");
@@ -90,11 +96,6 @@ var natsConnection = new NatsConnection(new NatsOpts
     Url = nats
 });
 
-INatsJSContext js = natsConnection.CreateJetStreamContext();
-
-await js.CreateOrUpdateStreamAsync(new StreamConfig(name: "payments", subjects: ["payments"]));
-
-
 for (int i = 0; i < 10; i++)
 {
     warmupTasks.Add(Task.Run(async () =>
@@ -136,7 +137,7 @@ for (int i = 0; i < Environment.ProcessorCount; i++)
             {
                 try
                 {
-                    await js.PublishConcurrentAsync($"payments.{Guid.NewGuid()}", msg.Buffer.AsMemory(0, msg.Length));
+                    await natsConnection.PublishAsync($"payments", msg.Buffer.AsMemory(0, msg.Length));
                 }
                 finally
                 {
@@ -147,6 +148,23 @@ for (int i = 0; i < Environment.ProcessorCount; i++)
     });
 }
 
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    Task.Run(async () =>
+    {
+        var socketPath = $"/sockets/{Dns.GetHostName()}.sock";
+
+        // Wait until socket exists
+        while (!File.Exists(socketPath))
+        {
+            await Task.Delay(100);
+        }
+
+        // Set permission to 777 using native syscall or external process
+        var chmodProcess = Process.Start("chmod", $"777 {socketPath}");
+        chmodProcess.WaitForExit();
+    });
+});
 app.Run();
 
 

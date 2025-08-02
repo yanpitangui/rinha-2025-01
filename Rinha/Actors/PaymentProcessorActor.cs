@@ -58,7 +58,7 @@ public sealed class PaymentProcessorActor : ActorBase, IWithTimers
             _ => throw new ArgumentOutOfRangeException(nameof(message), message, null)
         };
         
-        Task.Run(() => RequestPayment(request));
+        _ = RequestPayment(request);
         return true;
     }
 
