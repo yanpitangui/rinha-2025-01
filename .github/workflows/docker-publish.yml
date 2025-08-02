@@ -2,8 +2,9 @@ name: Docker
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "aot" ]
     tags: [ 'v*.*.*' ]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
