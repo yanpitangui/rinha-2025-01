@@ -4,7 +4,7 @@ x-service-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
+          cpus: "0.3"
           memory: "30MB"
     networks:
       - backend
@@ -31,11 +31,7 @@ services:
     <<: *backend
     container_name: backend-2
     hostname: backend-2
-  backend-3:
-    <<: *backend
-    container_name: backend-3
-    hostname: backend-3
-
+    
   worker: 
     image: worker:latest
     environment:
@@ -75,7 +71,6 @@ services:
     depends_on:
       - backend-1
       - backend-2
-      - backend-3
     networks:
       - backend
     ulimits:
