@@ -7,6 +7,7 @@ public sealed class RouterActor : ReceiveActor
 {
     private readonly IActorRef _monitor;
     private Switch _switch = Switch.Default;
+    private const int MaxRetries = 3;
 
     private readonly IActorRef _defaultPool;
     private readonly IActorRef _fallbackPool;
@@ -29,6 +30,12 @@ public sealed class RouterActor : ReceiveActor
 
         Receive<PaymentRequest>(req =>
         {
+            if (req.Attempt >= MaxRetries)
+            {
+                return;
+            }
+
+            
             if (_switch == Switch.Default)
             {
                 _defaultPool.Tell(req);
@@ -57,7 +64,7 @@ public sealed class RouterActor : ReceiveActor
         if (main.Failing && !fallback.Failing)
             return Switch.Fallback;
 
-        var multiplier = 2.5m;
+        var multiplier = 4.5m;
         return main.MinResponseTime <= fallback.MinResponseTime * multiplier
             ? Switch.Default
             : Switch.Fallback;

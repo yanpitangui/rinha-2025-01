@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Threading.Channels;
 using Akka.Actor;
 using Akka.Streams;
@@ -10,13 +9,11 @@ namespace Rinha.Actors;
 
 public sealed class PaymentPipelineActor : ReceiveActor
 {
-    private const int MaxRetries = 3;
-    private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
-
     private readonly string _key;
     private readonly NpgsqlDataSource _source;
-    private readonly ChannelWriter<PaymentRequest> _pipeline;
+    private readonly ChannelWriter<(PaymentRequest, IActorRef)> _pipeline;
     private readonly HttpClient _client;
+    private readonly IActorRef _retryActor;
     
     public PaymentPipelineActor(string key, IHttpClientFactory factory, NpgsqlDataSource source, PipelineConfig pipelineConfig)
     {
@@ -24,17 +21,19 @@ public sealed class PaymentPipelineActor : ReceiveActor
         _source = source;
         _pipeline = StartStream(pipelineConfig);
         _client = factory.CreateClient(key);
+        _retryActor = Context.ActorOf(Props.Create<RetryActor>());
         ReceiveAsync<PaymentRequest>(async msg =>
         {
-            await _pipeline.WriteAsync(msg);
+            var sender = Sender;
+            await _pipeline.WriteAsync((msg, sender));
         });
 
     }
     
-    public ChannelWriter<PaymentRequest> StartStream(PipelineConfig config)
+    public ChannelWriter<(PaymentRequest, IActorRef)> StartStream(PipelineConfig config)
     {
         var materializer = Context.Materializer();
-        var (mainWriter, mainSource) = Source.Channel<PaymentRequest>
+        var (mainWriter, mainSource) = Source.Channel<(PaymentRequest, IActorRef)>
                 (10000, fullMode: BoundedChannelFullMode.Wait)
             .PreMaterialize(materializer);
         mainSource
@@ -48,22 +47,22 @@ public sealed class PaymentPipelineActor : ReceiveActor
         return mainWriter;
     }
 
-    private async Task<PaymentResult> HandlePayment(PaymentRequest payment)
+    private async Task<PaymentResult> HandlePayment((PaymentRequest payment, IActorRef sender) req)
     {
         var requestedAt = DateTimeOffset.UtcNow;
 
         try
         {
             var response = await _client.PostAsJsonAsync("/payments", new ProcessorPaymentRequest(
-                payment.Amount,
+                req.payment.Amount,
                 requestedAt,
-                payment.CorrelationId), WorkerContext.Default.ProcessorPaymentRequest);
+                req.payment.CorrelationId), WorkerContext.Default.ProcessorPaymentRequest);
 
             if (response.IsSuccessStatusCode)
             {
                 var persisted = new PaymentResult(
-                    payment.CorrelationId,
-                    payment.Amount,
+                    req.payment.CorrelationId,
+                    req.payment.Amount,
                     requestedAt,
                     true
                 );
@@ -74,39 +73,18 @@ public sealed class PaymentPipelineActor : ReceiveActor
         {
             // ignored
         }
-        return new PaymentResult(payment.CorrelationId, payment.Amount, requestedAt, false);
+        RetryOrGiveUp(req.payment, req.sender);
+        return new PaymentResult(req.payment.CorrelationId, req.payment.Amount, requestedAt, false);
     }
 
     private void RetryOrGiveUp(PaymentRequest payment, IActorRef sender)
     {
-        if (payment.Attempt >= MaxRetries)
-        {
-            return;
-        }
-
         var nextAttempt = payment.Attempt + 1;
-        var delay = ComputeBackoffWithJitter(nextAttempt);
-
         var retryMessage = payment with { Attempt = nextAttempt };
-        Context.System.Scheduler.ScheduleTellOnce(delay, sender, retryMessage, Self);
-        return;
-        
+        _retryActor.Tell(new RetryActor.Commands.RetryablePayment(retryMessage, sender));
     }
 
-    private static TimeSpan ComputeBackoffWithJitter(int attempt)
-    {
-        var baseDelayMs = (int)(100 * Math.Pow(2, attempt)); // 200ms, 400ms, 800ms
-        var jitter = RandomJitterMilliseconds(20); // ±20ms
-        return TimeSpan.FromMilliseconds(baseDelayMs + jitter);
-    }
 
-    private static int RandomJitterMilliseconds(int maxJitter)
-    {
-        Span<byte> bytes = stackalloc byte[4];
-        _rng.GetBytes(bytes);
-        int raw = BitConverter.ToInt32(bytes) & int.MaxValue; // force positive
-        return raw % (2 * maxJitter + 1) - maxJitter;
-    }
     
     private async Task<List<PaymentResult>> PersistPayments(IEnumerable<PaymentResult> batch)
     {

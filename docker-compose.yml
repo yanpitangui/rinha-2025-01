@@ -4,7 +4,7 @@ x-service-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.45"
           memory: "30MB"
     networks:
       - backend
@@ -31,8 +31,8 @@ services:
     <<: *backend
     container_name: backend-2
     hostname: backend-2
-    
-  worker: 
+  
+  worker:
     image: worker:latest
     environment:
       - DOTNETCORE_ENVIRONMENT=Production
@@ -59,7 +59,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
+          cpus: "0.2"
           memory: "100MB"
   nginx:
     image: nginx:alpine
@@ -80,7 +80,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.2"
           memory: "80MB"
   nats:
     image: nats:alpine
