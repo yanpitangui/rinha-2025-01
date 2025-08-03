@@ -1,7 +1,6 @@
 using Akka.Actor;
 using Akka.Hosting;
 using Akka.Routing;
-using Akka.Streams;
 using Npgsql;
 using Rinha.Actors;
 
@@ -21,10 +20,10 @@ public static class AkkaSetup
         
         Console.WriteLine(poolConfigOptions);
         
-        var persisterConfig = builder.Configuration.GetSection("Persister");
-        var persisterConfigOptions = persisterConfig.Get<PersisterConfig>()!;
+        var pipelineSection = builder.Configuration.GetSection("Pipeline");
+        var pipelineConfig = pipelineSection.Get<PipelineConfig>()!;
         
-        Console.WriteLine(persisterConfigOptions);
+        Console.WriteLine(pipelineConfig);
 
         builder.Services.AddAkka(actorSystemName, (b, provider) =>
         {
@@ -35,19 +34,12 @@ public static class AkkaSetup
 
                     var monitor = system.ActorOf(Props.Create<HealthMonitorActor>(factory));
                     registry.Register<HealthMonitorActor>(monitor);
-                    var persister = new BatchPersister(source);
-                    var defaultWriter = persister.StartStream(persisterConfigOptions, system.Materializer());
-                    var fallbackWriter = persister.StartStream(persisterConfigOptions, system.Materializer());
-
                     
                     var defaultPool = system.ActorOf(Props
-                        .Create<PaymentProcessorActor>("default", factory, defaultWriter)
-                        .WithRouter(new RoundRobinPool(poolConfigOptions.DefaultPoolSize, new DefaultResizer(poolConfigOptions.DefaultPoolSize, 300))), "defaultPool");
-
+                        .Create<PaymentPipelineActor>("default", factory, source, pipelineConfig));
 
                     var fallbackPool = system.ActorOf(Props
-                        .Create<PaymentProcessorActor>("fallback", factory, fallbackWriter)
-                        .WithRouter(new RoundRobinPool(poolConfigOptions.FallbackPoolSize,  new DefaultResizer(poolConfigOptions.FallbackPoolSize, 300))), "fallbackPool");
+                        .Create<PaymentPipelineActor>("fallback", factory, source, pipelineConfig));
 
                     var router = system.ActorOf(
                         Props.Create<RouterActor>(registry.Get<HealthMonitorActor>(), defaultPool, fallbackPool)

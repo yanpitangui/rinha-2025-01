@@ -4,7 +4,7 @@ x-service-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.2"
           memory: "30MB"
     networks:
       - backend
@@ -31,18 +31,21 @@ services:
     <<: *backend
     container_name: backend-2
     hostname: backend-2
+  backend-3:
+    <<: *backend
+    container_name: backend-3
+    hostname: backend-3
 
   worker: 
     image: worker:latest
     environment:
       - DOTNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_ENVIRONMENT=Production
-      - Pool__DefaultPoolSize=50
-      - Pool__FallbackPoolSize=50
-      - Pool__RouterPoolSize=15
-      - Persister__PersistPaymentsParallelism=10
-      - Persister__GroupSize=100
-      - Persister__Timeout=5
+      - Pool__RouterPoolSize=3
+      - Pipeline__HandlePaymentParallelism=20
+      - Pipeline__PersistPaymentsParallelism=10
+      - Pipeline__GroupSize=100
+      - Pipeline__Timeout=10
       - ConnectionStrings__nats=nats:4222
       - ConnectionStrings__postgres=Host=/var/run/postgresql;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Maximum Pool Size=20;Multiplexing=true;Timeout=15;Command Timeout=15;Cancellation Timeout=-1;No Reset On Close=true;Max Auto Prepare=20;Auto Prepare Min Usages=1;
       - ConnectionStrings__default=http://payment-processor-default:8080
@@ -60,8 +63,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.6"
-          memory: "130MB"
+          cpus: "0.4"
+          memory: "100MB"
   nginx:
     image: nginx:alpine
     volumes:
@@ -72,6 +75,7 @@ services:
     depends_on:
       - backend-1
       - backend-2
+      - backend-3
     networks:
       - backend
     ulimits:
@@ -81,8 +85,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.1"
-          memory: "50MB"
+          cpus: "0.3"
+          memory: "80MB"
   nats:
     image: nats:alpine
     hostname: nats

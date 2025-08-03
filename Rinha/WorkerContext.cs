@@ -4,7 +4,7 @@ using Rinha.Actors;
 namespace Rinha;
 
 
-[JsonSerializable(typeof(PaymentProcessorActor.ProcessorPaymentRequest))]
+[JsonSerializable(typeof(PaymentPipelineActor.ProcessorPaymentRequest))]
 public partial class WorkerContext : JsonSerializerContext
 {
     
