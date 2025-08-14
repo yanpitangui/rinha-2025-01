@@ -2,7 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: [ "main", "aot" ]
+    branches: [ "main", "covardia" ]
     tags: [ 'v*.*.*' ]
   workflow_dispatch:
 
@@ -50,7 +50,7 @@ jobs:
         id: meta-worker
         uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
         with:
-          images: ghcr.io/${{ github.repository }}-worker
+          images: ghcr.io/${{ github.repository }}-worker-covardia
           tags: |
             type=raw,value=latest,enable=true
             type=raw,value=${{ steps.ts.outputs.value }}
@@ -60,7 +60,7 @@ jobs:
         id: meta-api
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}-api
+          images: ghcr.io/${{ github.repository }}-api-covardia
           tags: |
             type=raw,value=latest,enable=true
             type=raw,value=${{ steps.ts.outputs.value }}

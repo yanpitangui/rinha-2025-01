@@ -64,10 +64,7 @@ public sealed class RouterActor : ReceiveActor
         if (main.Failing && !fallback.Failing)
             return Switch.Fallback;
 
-        var multiplier = 4.5m;
-        return main.MinResponseTime <= fallback.MinResponseTime * multiplier
-            ? Switch.Default
-            : Switch.Fallback;
+        return Switch.Default;
     }
     
     private enum Switch
