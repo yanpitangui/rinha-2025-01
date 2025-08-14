@@ -7,7 +7,7 @@ public sealed class RouterActor : ReceiveActor
 {
     private readonly IActorRef _monitor;
     private Switch _switch = Switch.Default;
-    private const int MaxRetries = 3;
+    private const int MaxRetries = 5;
 
     private readonly IActorRef _defaultPool;
     private readonly IActorRef _fallbackPool;

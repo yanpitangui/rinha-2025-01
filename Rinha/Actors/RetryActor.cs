@@ -19,7 +19,7 @@ public class RetryActor : ReceiveActor
     
     private static TimeSpan ComputeBackoffWithJitter(int attempt)
     {
-        var baseDelayMs = (int)(100 * Math.Pow(2, attempt)); // 200ms, 400ms, 800ms
+        var baseDelayMs = (int)(500 * Math.Pow(2, attempt)); // 200ms, 400ms, 800ms
         var jitter = RandomJitterMilliseconds(20); // ±20ms
         return TimeSpan.FromMilliseconds(baseDelayMs + jitter);
     }
